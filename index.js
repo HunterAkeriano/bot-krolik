@@ -1,10 +1,14 @@
 const TelegramBot = require('node-telegram-bot-api');
 const schedule = require('node-schedule');
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN';
-const DATA_FILE = path.join(__dirname, 'subscribers.json');
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:iHJFUqFoOcTrkwBeeLcRUEYBuTzVuMbY@turntable.proxy.rlwy.net:51550/railway';
+
+const pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
@@ -15,44 +19,188 @@ let participants = new Map();
 let players = [];
 
 const DEFAULT_PLAYERS = [
-    { game: 'Монблан', telegram: '@Matricariay', name: 'Лана' },
-    { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий' },
-    { game: 'Мари', telegram: '@Marim333', name: 'Мари' },
-    { game: 'Лика', telegram: '-', name: 'Анжелика' },
-    { game: 'Амили', telegram: '@the_beesttt', name: 'Амили' },
-    { game: 'Бантан', telegram: '@tamisj', name: 'Тамила' },
-    { game: 'Оракул', telegram: '@dimag97', name: 'Дмитрий' },
-    { game: 'Татьяна', telegram: '@tanja_008_t', name: 'Татьяна' },
-    { game: 'Дикий', telegram: '@dik707', name: 'Руслан' },
-    { game: 'Иришка', telegram: '@Iri280', name: 'Ирина' },
-    { game: '@vixxke', telegram: '@vixxke', name: 'Настя' },
-    { game: 'Ягода малинка', telegram: '@dima_gulak', name: 'Дмитрий' }
+    { game: 'Монблан', telegram: '@Matricariay', name: 'Лана', birthday: '14.07' },
+    { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий', birthday: '29.07' },
+    { game: 'Мари', telegram: '@Marim333', name: 'Мари', birthday: null },
+    { game: 'Лика', telegram: '-', name: 'Анжелика', birthday: '25.11' },
+    { game: 'Амили', telegram: '@the_beesttt', name: 'Амили', birthday: '31.12' },
+    { game: 'Бантан', telegram: '@tamisj', name: 'Тамила', birthday: '07.03' },
+    { game: 'Оракул', telegram: '@dimag97', name: 'Дмитрий', birthday: '10.12' },
+    { game: 'Татьяна', telegram: '@tanja_008_t', name: 'Татьяна', birthday: '30.08' },
+    { game: 'Дикий', telegram: '@dik707', name: 'Руслан', birthday: null },
+    { game: 'Иришка', telegram: '@Iri280', name: 'Ирина', birthday: '30.08' },
+    { game: '@vixxke', telegram: '@vixxke', name: 'Настя', birthday: '19.03' },
+    { game: 'Ягода малинка', telegram: '@dima_gulak', name: 'Дмитрий', birthday: '10.11' },
+    { game: 'Марина', telegram: '@marina123', name: 'Марина', birthday: '20.02' }
 ];
 
-function loadSubscribers() {
+async function initDB() {
+    const client = await pool.connect();
     try {
-        if (fs.existsSync(DATA_FILE)) {
-            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-            subscribers = new Set(data.subscribers || []);
-            derbyStartTime = data.derbyStartTime ? new Date(data.derbyStartTime) : null;
-            participants = new Map(Object.entries(data.participants || {}));
-            players = data.players || DEFAULT_PLAYERS;
-        } else {
-            players = DEFAULT_PLAYERS;
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS subscribers (
+                chat_id BIGINT PRIMARY KEY
+            )
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS participants (
+                chat_id BIGINT,
+                user_id BIGINT,
+                username TEXT,
+                name TEXT,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS players (
+                id SERIAL PRIMARY KEY,
+                game TEXT,
+                telegram TEXT,
+                name TEXT,
+                birthday TEXT
+            )
+        `);
+
+        const playersCount = await client.query('SELECT COUNT(*) FROM players');
+        if (parseInt(playersCount.rows[0].count) === 0) {
+            for (const p of DEFAULT_PLAYERS) {
+                await client.query(
+                    'INSERT INTO players (game, telegram, name, birthday) VALUES ($1, $2, $3, $4)',
+                    [p.game, p.telegram, p.name, p.birthday]
+                );
+            }
         }
-    } catch (e) {
-        subscribers = new Set();
-        players = DEFAULT_PLAYERS;
+    } finally {
+        client.release();
     }
 }
 
-function saveSubscribers() {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({
-        subscribers: [...subscribers],
-        derbyStartTime: derbyStartTime ? derbyStartTime.toISOString() : null,
-        participants: Object.fromEntries(participants),
-        players: players
-    }));
+async function loadData() {
+    const client = await pool.connect();
+    try {
+        const subsResult = await client.query('SELECT chat_id FROM subscribers');
+        subscribers = new Set(subsResult.rows.map(r => r.chat_id.toString()));
+
+        const settingsResult = await client.query("SELECT value FROM settings WHERE key = 'derby_start_time'");
+        if (settingsResult.rows.length > 0 && settingsResult.rows[0].value) {
+            derbyStartTime = new Date(settingsResult.rows[0].value);
+        }
+
+        const participantsResult = await client.query('SELECT chat_id, user_id, username, name FROM participants');
+        participants = new Map();
+        participantsResult.rows.forEach(r => {
+            const chatId = r.chat_id.toString();
+            if (!participants.has(chatId)) {
+                participants.set(chatId, []);
+            }
+            participants.get(chatId).push({
+                id: r.user_id,
+                username: r.username,
+                name: r.name
+            });
+        });
+
+        const playersResult = await client.query('SELECT id, game, telegram, name, birthday FROM players ORDER BY id');
+        players = playersResult.rows;
+    } finally {
+        client.release();
+    }
+}
+
+async function saveSubscriber(chatId, add = true) {
+    const client = await pool.connect();
+    try {
+        if (add) {
+            await client.query('INSERT INTO subscribers (chat_id) VALUES ($1) ON CONFLICT DO NOTHING', [chatId]);
+            subscribers.add(chatId.toString());
+        } else {
+            await client.query('DELETE FROM subscribers WHERE chat_id = $1', [chatId]);
+            subscribers.delete(chatId.toString());
+        }
+    } finally {
+        client.release();
+    }
+}
+
+async function saveDerbyTime(time) {
+    const client = await pool.connect();
+    try {
+        await client.query(
+            "INSERT INTO settings (key, value) VALUES ('derby_start_time', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+            [time ? time.toISOString() : null]
+        );
+        derbyStartTime = time;
+    } finally {
+        client.release();
+    }
+}
+
+async function saveParticipant(chatId, user, add = true) {
+    const client = await pool.connect();
+    try {
+        if (add) {
+            await client.query(
+                'INSERT INTO participants (chat_id, user_id, username, name) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+                [chatId, user.id, user.username, user.name]
+            );
+        } else {
+            await client.query('DELETE FROM participants WHERE chat_id = $1 AND user_id = $2', [chatId, user.id]);
+        }
+    } finally {
+        client.release();
+    }
+}
+
+async function clearParticipants(chatId) {
+    const client = await pool.connect();
+    try {
+        await client.query('DELETE FROM participants WHERE chat_id = $1', [chatId]);
+        participants.set(chatId.toString(), []);
+    } finally {
+        client.release();
+    }
+}
+
+async function addPlayer(game, telegram, name, birthday) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(
+            'INSERT INTO players (game, telegram, name, birthday) VALUES ($1, $2, $3, $4) RETURNING *',
+            [game, telegram, name, birthday]
+        );
+        players.push(result.rows[0]);
+        return result.rows[0];
+    } finally {
+        client.release();
+    }
+}
+
+async function removePlayer(index) {
+    const client = await pool.connect();
+    try {
+        const player = players[index];
+        await client.query('DELETE FROM players WHERE id = $1', [player.id]);
+        return players.splice(index, 1)[0];
+    } finally {
+        client.release();
+    }
+}
+
+async function updatePlayerBirthday(playerId, birthday) {
+    const client = await pool.connect();
+    try {
+        await client.query('UPDATE players SET birthday = $1 WHERE id = $2', [birthday, playerId]);
+        const player = players.find(p => p.id === playerId);
+        if (player) player.birthday = birthday;
+    } finally {
+        client.release();
+    }
 }
 
 function getParticipantMentions(chatId) {
@@ -209,9 +357,8 @@ function getNextResets() {
     return upcoming.slice(0, 3);
 }
 
-bot.onText(/\/start/, (msg) => {
-    subscribers.add(msg.chat.id);
-    saveSubscribers();
+bot.onText(/\/start/, async (msg) => {
+    await saveSubscriber(msg.chat.id, true);
 
     bot.sendMessage(msg.chat.id,
 `🐰 <b>Hay Day Derby Bot</b>
@@ -245,15 +392,13 @@ bot.onText(/\/start/, (msg) => {
 /unsubscribe - Отписаться`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/subscribe/, (msg) => {
-    subscribers.add(msg.chat.id);
-    saveSubscribers();
+bot.onText(/\/subscribe/, async (msg) => {
+    await saveSubscriber(msg.chat.id, true);
     bot.sendMessage(msg.chat.id, '✅ Вы подписаны на уведомления!');
 });
 
-bot.onText(/\/unsubscribe/, (msg) => {
-    subscribers.delete(msg.chat.id);
-    saveSubscribers();
+bot.onText(/\/unsubscribe/, async (msg) => {
+    await saveSubscriber(msg.chat.id, false);
     bot.sendMessage(msg.chat.id, '❌ Вы отписаны от уведомлений.');
 });
 
@@ -279,7 +424,7 @@ bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, status, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/setderby(?:\s+(.+))?/, (msg, match) => {
+bot.onText(/\/setderby(?:\s+(.+))?/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -310,8 +455,7 @@ bot.onText(/\/setderby(?:\s+(.+))?/, (msg, match) => {
         return;
     }
 
-    derbyStartTime = kyivDate;
-    saveSubscribers();
+    await saveDerbyTime(kyivDate);
     scheduleDerbyResets();
 
     bot.sendMessage(msg.chat.id,
@@ -363,15 +507,14 @@ bot.onText(/\/resets/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/clearderby/, (msg) => {
-    derbyStartTime = null;
+bot.onText(/\/clearderby/, async (msg) => {
+    await saveDerbyTime(null);
     scheduledJobs.forEach(job => job.cancel());
     scheduledJobs = [];
-    saveSubscribers();
     bot.sendMessage(msg.chat.id, '✅ Дерби сброшено.');
 });
 
-bot.onText(/\/join/, (msg) => {
+bot.onText(/\/join/, async (msg) => {
     const chatId = String(msg.chat.id);
     const user = msg.from;
 
@@ -382,20 +525,21 @@ bot.onText(/\/join/, (msg) => {
         return;
     }
 
-    chatParticipants.push({
+    const newParticipant = {
         id: user.id,
         username: user.username || null,
         name: user.first_name + (user.last_name ? ' ' + user.last_name : '')
-    });
+    };
 
+    await saveParticipant(msg.chat.id, newParticipant, true);
+    chatParticipants.push(newParticipant);
     participants.set(chatId, chatParticipants);
-    saveSubscribers();
 
     const name = user.username ? `@${user.username}` : user.first_name;
     bot.sendMessage(msg.chat.id, `✅ ${name} присоединился к скачкам!\n\nУчастников: ${chatParticipants.length}`);
 });
 
-bot.onText(/\/leave/, (msg) => {
+bot.onText(/\/leave/, async (msg) => {
     const chatId = String(msg.chat.id);
     const user = msg.from;
 
@@ -409,8 +553,8 @@ bot.onText(/\/leave/, (msg) => {
         return;
     }
 
+    await saveParticipant(msg.chat.id, { id: user.id }, false);
     participants.set(chatId, chatParticipants);
-    saveSubscribers();
 
     const name = user.username ? `@${user.username}` : user.first_name;
     bot.sendMessage(msg.chat.id, `👋 ${name} покинул скачки.\n\nОсталось участников: ${chatParticipants.length}`);
@@ -434,10 +578,8 @@ bot.onText(/\/participants/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/clearparticipants/, (msg) => {
-    const chatId = String(msg.chat.id);
-    participants.set(chatId, []);
-    saveSubscribers();
+bot.onText(/\/clearparticipants/, async (msg) => {
+    await clearParticipants(msg.chat.id);
     bot.sendMessage(msg.chat.id, '✅ Список участников очищен.');
 });
 
@@ -497,7 +639,7 @@ bot.onText(/\/player(?:\s+(.+))?/, (msg, match) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/addplayer(?:\s+(.+))?/, (msg, match) => {
+bot.onText(/\/addplayer(?:\s+(.+))?/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -519,15 +661,14 @@ bot.onText(/\/addplayer(?:\s+(.+))?/, (msg, match) => {
     }
 
     const [game, telegram, name, birthday] = parts;
-    players.push({ game, telegram, name, birthday: birthday || null });
-    saveSubscribers();
+    await addPlayer(game, telegram, name, birthday || null);
 
     let response = `✅ Игрок добавлен!\n\n🎮 ${game}\n📱 ${telegram}\n👤 ${name}`;
     if (birthday) response += `\n🎂 ${birthday}`;
     bot.sendMessage(msg.chat.id, response);
 });
 
-bot.onText(/\/removeplayer(?:\s+(.+))?/, (msg, match) => {
+bot.onText(/\/removeplayer(?:\s+(.+))?/, async (msg, match) => {
     const search = match[1];
 
     if (!search) {
@@ -546,13 +687,11 @@ bot.onText(/\/removeplayer(?:\s+(.+))?/, (msg, match) => {
         return;
     }
 
-    const removed = players.splice(index, 1)[0];
-    saveSubscribers();
-
+    const removed = await removePlayer(index);
     bot.sendMessage(msg.chat.id, `✅ Игрок удалён!\n\n🎮 ${removed.game}\n📱 ${removed.telegram}\n👤 ${removed.name}`);
 });
 
-bot.onText(/\/setbirthday(?:\s+(.+))?/, (msg, match) => {
+bot.onText(/\/setbirthday(?:\s+(.+))?/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -583,9 +722,7 @@ bot.onText(/\/setbirthday(?:\s+(.+))?/, (msg, match) => {
         return;
     }
 
-    player.birthday = birthday;
-    saveSubscribers();
-
+    await updatePlayerBirthday(player.id, birthday);
     bot.sendMessage(msg.chat.id, `✅ День рождения установлен!\n\n🎮 ${player.game}\n🎂 ${birthday}`);
 });
 
@@ -600,7 +737,7 @@ bot.onText(/\/birthdays/, (msg) => {
     const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
                     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
-    const sorted = withBirthdays.sort((a, b) => {
+    const sorted = [...withBirthdays].sort((a, b) => {
         const [dayA, monthA] = a.birthday.split('.').map(Number);
         const [dayB, monthB] = b.birthday.split('.').map(Number);
         return monthA - monthB || dayA - dayB;
@@ -693,9 +830,13 @@ bot.on('message', (msg) => {
     }
 });
 
-loadSubscribers();
-scheduleRabbitNotifications();
-scheduleDerbyResets();
-scheduleBirthdayNotifications();
+async function start() {
+    await initDB();
+    await loadData();
+    scheduleRabbitNotifications();
+    scheduleDerbyResets();
+    scheduleBirthdayNotifications();
+    console.log('🐰 Hay Day Derby Bot запущен! (PostgreSQL)');
+}
 
-console.log('🐰 Hay Day Derby Bot запущен!');
+start().catch(console.error);
