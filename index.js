@@ -1,9 +1,13 @@
 const TelegramBot = require('node-telegram-bot-api');
 const schedule = require('node-schedule');
 const { Pool } = require('pg');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const DATABASE_URL = process.env.DATABASE_URL;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
@@ -875,10 +879,35 @@ const BOT_PHRASES = [
     'Та не...'
 ];
 
-bot.on('message', (msg) => {
+async function askGemini(question) {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const prompt = `Ты - современный подросток который общается в чате. Отвечай на вопросы используя молодежный сленг, такие слова как: краш, рофл, чилить, вайб, кринж, имба, изи, база, лол, орать (в смысле смеяться), душнить, агриться, флексить, зашквар, топ, пруфы и т.д. Отвечай коротко, дерзко и по делу. Можешь использовать эмодзи но не переборщи.
+
+Вопрос: ${question}`;
+
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+}
+
+bot.on('message', async (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
 
     const text = msg.text.toLowerCase();
+
+    if (/^ии\s+/i.test(msg.text)) {
+        const question = msg.text.replace(/^ии\s+/i, '').trim();
+        if (!question) {
+            bot.sendMessage(msg.chat.id, 'Бро, ты вопрос то напиши после "ИИ" 💀');
+            return;
+        }
+        try {
+            const response = await askGemini(question);
+            bot.sendMessage(msg.chat.id, response);
+        } catch (error) {
+            bot.sendMessage(msg.chat.id, 'Ауч, ИИ сломался, кринж момент 💀');
+        }
+        return;
+    }
 
     if (/скачки|скакать/.test(text)) {
         const phrase = RANDOM_PHRASES[Math.floor(Math.random() * RANDOM_PHRASES.length)];

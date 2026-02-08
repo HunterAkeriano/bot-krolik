@@ -8,6 +8,7 @@
   },
   "private": true,
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "node-schedule": "^2.1.1",
     "node-telegram-bot-api": "^0.67.0",
     "pg": "^8.18.0"
