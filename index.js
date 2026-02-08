@@ -12,6 +12,22 @@ let subscribers = new Set();
 let derbyStartTime = null;
 let scheduledJobs = [];
 let participants = new Map();
+let players = [];
+
+const DEFAULT_PLAYERS = [
+    { game: 'Монблан', telegram: '@Matricariay', name: 'Лана' },
+    { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий' },
+    { game: 'Мари', telegram: '@Marim333', name: 'Мари' },
+    { game: 'Лика', telegram: '-', name: 'Анжелика' },
+    { game: 'Амили', telegram: '@the_beesttt', name: 'Амили' },
+    { game: 'Бантан', telegram: '@tamisj', name: 'Тамила' },
+    { game: 'Оракул', telegram: '@dimag97', name: 'Дмитрий' },
+    { game: 'Татьяна', telegram: '@tanja_008_t', name: 'Татьяна' },
+    { game: 'Дикий', telegram: '@dik707', name: 'Руслан' },
+    { game: 'Иришка', telegram: '@Iri280', name: 'Ирина' },
+    { game: '@vixxke', telegram: '@vixxke', name: 'Настя' },
+    { game: 'Ягода малинка', telegram: '@dima_gulak', name: 'Дмитрий' }
+];
 
 function loadSubscribers() {
     try {
@@ -20,9 +36,13 @@ function loadSubscribers() {
             subscribers = new Set(data.subscribers || []);
             derbyStartTime = data.derbyStartTime ? new Date(data.derbyStartTime) : null;
             participants = new Map(Object.entries(data.participants || {}));
+            players = data.players || DEFAULT_PLAYERS;
+        } else {
+            players = DEFAULT_PLAYERS;
         }
     } catch (e) {
         subscribers = new Set();
+        players = DEFAULT_PLAYERS;
     }
 }
 
@@ -30,7 +50,8 @@ function saveSubscribers() {
     fs.writeFileSync(DATA_FILE, JSON.stringify({
         subscribers: [...subscribers],
         derbyStartTime: derbyStartTime ? derbyStartTime.toISOString() : null,
-        participants: Object.fromEntries(participants)
+        participants: Object.fromEntries(participants),
+        players: players
     }));
 }
 
@@ -183,6 +204,14 @@ bot.onText(/\/start/, (msg) => {
 /leave - Покинуть скачки
 /participants - Список участников
 /ping - Пингануть всех участников
+
+<b>Игроки:</b>
+/players - Список всех игроков
+/player [ник] - Найти игрока
+/addplayer - Добавить игрока
+/removeplayer [ник] - Удалить игрока
+/birthdays - Дни рождения
+/setbirthday - Установить день рождения
 
 <b>Настройки:</b>
 /setderby - Установить время старта дерби
@@ -393,6 +422,167 @@ bot.onText(/\/ping/, (msg) => {
         return;
     }
     bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание участникам скачек!</b>`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/players/, (msg) => {
+    if (players.length === 0) {
+        bot.sendMessage(msg.chat.id, '📋 Список игроков пуст.');
+        return;
+    }
+
+    let message = `🎮 <b>Список игроков (${players.length}):</b>\n\n`;
+    players.forEach((p, index) => {
+        message += `${index + 1}. 🎮 ${p.game}\n`;
+        message += `   📱 ${p.telegram}\n`;
+        message += `   👤 ${p.name}\n\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/player(?:\s+(.+))?/, (msg, match) => {
+    const search = match[1];
+
+    if (!search) {
+        bot.sendMessage(msg.chat.id, '❓ Укажите ник или имя игрока.\n\nПример: /player Монблан');
+        return;
+    }
+
+    const searchLower = search.toLowerCase();
+    const found = players.find(p =>
+        p.game.toLowerCase().includes(searchLower) ||
+        p.name.toLowerCase().includes(searchLower) ||
+        p.telegram.toLowerCase().includes(searchLower)
+    );
+
+    if (!found) {
+        bot.sendMessage(msg.chat.id, `❌ Игрок "${search}" не найден.`);
+        return;
+    }
+
+    let message = `🎮 <b>${found.game}</b>\n📱 Telegram: ${found.telegram}\n👤 Имя: ${found.name}`;
+    if (found.birthday) {
+        message += `\n🎂 День рождения: ${found.birthday}`;
+    }
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/addplayer(?:\s+(.+))?/, (msg, match) => {
+    const input = match[1];
+
+    if (!input) {
+        bot.sendMessage(msg.chat.id,
+`➕ <b>Добавить игрока</b>
+
+Формат: /addplayer Ник | @telegram | Имя | ДД.ММ
+
+Пример: /addplayer Монблан | @Matricariay | Лана | 14.07
+
+День рождения можно не указывать.`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    const parts = input.split('|').map(s => s.trim());
+    if (parts.length < 3) {
+        bot.sendMessage(msg.chat.id, '❌ Неверный формат. Пример: /addplayer Монблан | @Matricariay | Лана | 14.07');
+        return;
+    }
+
+    const [game, telegram, name, birthday] = parts;
+    players.push({ game, telegram, name, birthday: birthday || null });
+    saveSubscribers();
+
+    let response = `✅ Игрок добавлен!\n\n🎮 ${game}\n📱 ${telegram}\n👤 ${name}`;
+    if (birthday) response += `\n🎂 ${birthday}`;
+    bot.sendMessage(msg.chat.id, response);
+});
+
+bot.onText(/\/removeplayer(?:\s+(.+))?/, (msg, match) => {
+    const search = match[1];
+
+    if (!search) {
+        bot.sendMessage(msg.chat.id, '❓ Укажите ник игрока для удаления.\n\nПример: /removeplayer Монблан');
+        return;
+    }
+
+    const searchLower = search.toLowerCase();
+    const index = players.findIndex(p =>
+        p.game.toLowerCase() === searchLower ||
+        p.telegram.toLowerCase() === searchLower
+    );
+
+    if (index === -1) {
+        bot.sendMessage(msg.chat.id, `❌ Игрок "${search}" не найден.`);
+        return;
+    }
+
+    const removed = players.splice(index, 1)[0];
+    saveSubscribers();
+
+    bot.sendMessage(msg.chat.id, `✅ Игрок удалён!\n\n🎮 ${removed.game}\n📱 ${removed.telegram}\n👤 ${removed.name}`);
+});
+
+bot.onText(/\/setbirthday(?:\s+(.+))?/, (msg, match) => {
+    const input = match[1];
+
+    if (!input) {
+        bot.sendMessage(msg.chat.id,
+`🎂 <b>Установить день рождения</b>
+
+Формат: /setbirthday Ник | ДД.ММ
+
+Пример: /setbirthday Монблан | 14.07`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    const parts = input.split('|').map(s => s.trim());
+    if (parts.length !== 2) {
+        bot.sendMessage(msg.chat.id, '❌ Неверный формат. Пример: /setbirthday Монблан | 14.07');
+        return;
+    }
+
+    const [search, birthday] = parts;
+    const searchLower = search.toLowerCase();
+    const player = players.find(p =>
+        p.game.toLowerCase().includes(searchLower) ||
+        p.name.toLowerCase().includes(searchLower)
+    );
+
+    if (!player) {
+        bot.sendMessage(msg.chat.id, `❌ Игрок "${search}" не найден.`);
+        return;
+    }
+
+    player.birthday = birthday;
+    saveSubscribers();
+
+    bot.sendMessage(msg.chat.id, `✅ День рождения установлен!\n\n🎮 ${player.game}\n🎂 ${birthday}`);
+});
+
+bot.onText(/\/birthdays/, (msg) => {
+    const withBirthdays = players.filter(p => p.birthday);
+
+    if (withBirthdays.length === 0) {
+        bot.sendMessage(msg.chat.id, '🎂 Нет записей о днях рождения.');
+        return;
+    }
+
+    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+    const sorted = withBirthdays.sort((a, b) => {
+        const [dayA, monthA] = a.birthday.split('.').map(Number);
+        const [dayB, monthB] = b.birthday.split('.').map(Number);
+        return monthA - monthB || dayA - dayB;
+    });
+
+    let message = `🎂 <b>Дни рождения:</b>\n\n`;
+    sorted.forEach(p => {
+        const [day, month] = p.birthday.split('.').map(Number);
+        message += `${day} ${months[month - 1]} - ${p.name} (${p.game})\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
 const RANDOM_PHRASES = [
