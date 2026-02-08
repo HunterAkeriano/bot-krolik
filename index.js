@@ -68,6 +68,43 @@ async function findUserIdByUsername(chatId, username) {
     return null;
 }
 
+async function getKnownUserIds(chatId) {
+    const ids = new Set();
+    const chatParticipants = participants.get(String(chatId)) || [];
+    chatParticipants.forEach(p => ids.add(p.id));
+
+    const client = await pool.connect();
+    try {
+        const pRows = await client.query('SELECT user_id FROM participants WHERE chat_id = $1', [chatId]);
+        pRows.rows.forEach(r => ids.add(r.user_id));
+
+        const mRows = await client.query('SELECT user_id FROM message_stats WHERE chat_id = $1', [chatId]);
+        mRows.rows.forEach(r => ids.add(r.user_id));
+    } finally {
+        client.release();
+    }
+
+    return [...ids];
+}
+
+async function unrestrictUser(chatId, userId) {
+    return bot.restrictChatMember(chatId, userId, {
+        until_date: 0,
+        permissions: {
+            can_send_messages: true,
+            can_send_audios: true,
+            can_send_documents: true,
+            can_send_photos: true,
+            can_send_videos: true,
+            can_send_video_notes: true,
+            can_send_voice_notes: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true
+        }
+    });
+}
+
 const DEFAULT_PLAYERS = [
     { game: 'Монблан', telegram: '@Matricariay', name: 'Лана', birthday: '14.07' },
     { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий', birthday: '29.07' },
@@ -733,23 +770,36 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
         targetLabel = username;
     }
 
-    await bot.restrictChatMember(chatId, targetUserId, {
-        until_date: 0,
-        permissions: {
-            can_send_messages: true,
-            can_send_audios: true,
-            can_send_documents: true,
-            can_send_photos: true,
-            can_send_videos: true,
-            can_send_video_notes: true,
-            can_send_voice_notes: true,
-            can_send_polls: true,
-            can_send_other_messages: true,
-            can_add_web_page_previews: true
-        }
-    }).catch(() => {});
+    await unrestrictUser(chatId, targetUserId).catch(() => {});
 
     bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const ids = await getKnownUserIds(chatId);
+    let adminIds = [];
+
+    try {
+        const admins = await bot.getChatAdministrators(chatId);
+        adminIds = admins.map(a => a.user.id);
+    } catch {}
+
+    const allIds = [...new Set([...ids, ...adminIds])];
+    if (allIds.length === 0) {
+        bot.sendMessage(chatId, '❌ Нет данных о пользователях для размута.');
+        return;
+    }
+
+    let ok = 0;
+    for (const id of allIds) {
+        try {
+            await unrestrictUser(chatId, id);
+            ok++;
+        } catch {}
+    }
+
+    bot.sendMessage(chatId, `✅ Размучено: ${ok} пользователей.`, { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/join$/, async (msg) => {
