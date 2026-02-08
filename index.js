@@ -925,7 +925,9 @@ bot.on('message', async (msg) => {
 
     if (text === 'кто дуэль' || text === 'кто дуель') {
         console.log('Duel challenge triggered');
-        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' });
+        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' })
+            .then(() => console.log('Message sent'))
+            .catch(err => console.error('Send error:', err));
         duelChallenges.set(chatKey, {
             challenger: user,
             time: Date.now()
