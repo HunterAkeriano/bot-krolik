@@ -4,10 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "stop": "pkill -f 'node index.js' || true",
-    "restart": "npm run stop && npm run start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "private": true,
   "dependencies": {
