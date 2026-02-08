@@ -87,6 +87,32 @@ const RABBIT_TIMES_KYIV = [
     { day: 5, hour: 19, minute: 50, label: 'Пятница' }
 ];
 
+function scheduleBirthdayNotifications() {
+    const rule = new schedule.RecurrenceRule();
+    rule.hour = 0;
+    rule.minute = 0;
+    rule.tz = 'Europe/Kyiv';
+
+    schedule.scheduleJob(rule, () => {
+        const today = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit' }).replace(/\//g, '.');
+        const [day, month] = today.split('.');
+        const todayFormatted = `${day}.${month}`;
+
+        const birthdayPeople = players.filter(p => p.birthday === todayFormatted);
+
+        if (birthdayPeople.length > 0) {
+            birthdayPeople.forEach(person => {
+                const mention = person.telegram && person.telegram !== '-'
+                    ? person.telegram
+                    : person.name;
+
+                const message = `🎂🎉 <b>С Днём Рождения!</b> 🎉🎂\n\n${mention}, поздравляем тебя с Днём Рождения!\n\nЖелаем счастья, здоровья и отличных скачек! 🐰🏇`;
+                broadcast(message, false);
+            });
+        }
+    });
+}
+
 function scheduleRabbitNotifications() {
     RABBIT_TIMES_KYIV.forEach(rabbit => {
         const rule = new schedule.RecurrenceRule();
@@ -434,7 +460,11 @@ bot.onText(/\/players/, (msg) => {
     players.forEach((p, index) => {
         message += `${index + 1}. 🎮 ${p.game}\n`;
         message += `   📱 ${p.telegram}\n`;
-        message += `   👤 ${p.name}\n\n`;
+        message += `   👤 ${p.name}\n`;
+        if (p.birthday) {
+            message += `   🎂 ${p.birthday}\n`;
+        }
+        message += `\n`;
     });
 
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
@@ -666,5 +696,6 @@ bot.on('message', (msg) => {
 loadSubscribers();
 scheduleRabbitNotifications();
 scheduleDerbyResets();
+scheduleBirthdayNotifications();
 
 console.log('🐰 Hay Day Derby Bot запущен!');
