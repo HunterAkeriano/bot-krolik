@@ -376,7 +376,7 @@ function getNextResets() {
     return upcoming.slice(0, 3);
 }
 
-bot.onText(/\/start/, async (msg) => {
+bot.onText(/\/start$/, async (msg) => {
     await saveSubscriber(msg.chat.id, true);
 
     bot.sendMessage(msg.chat.id,
@@ -413,17 +413,17 @@ bot.onText(/\/start/, async (msg) => {
 /unsubscribe - Отписаться`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/subscribe/, async (msg) => {
+bot.onText(/\/subscribe$/, async (msg) => {
     await saveSubscriber(msg.chat.id, true);
     bot.sendMessage(msg.chat.id, '✅ Вы подписаны на уведомления!');
 });
 
-bot.onText(/\/unsubscribe/, async (msg) => {
+bot.onText(/\/unsubscribe$/, async (msg) => {
     await saveSubscriber(msg.chat.id, false);
     bot.sendMessage(msg.chat.id, '❌ Вы отписаны от уведомлений.');
 });
 
-bot.onText(/\/status/, (msg) => {
+bot.onText(/\/status$/, (msg) => {
     const nextRabbit = getNextRabbit();
     const nextResets = getNextResets();
 
@@ -445,7 +445,7 @@ bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, status, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/setderby(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/setderby(?:\s+(.+))?$/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -487,7 +487,7 @@ bot.onText(/\/setderby(?:\s+(.+))?/, async (msg, match) => {
 Я буду уведомлять о всех сбросах заданий.`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/rabbit/, (msg) => {
+bot.onText(/\/rabbit$/, (msg) => {
     const next = getNextRabbit();
     bot.sendMessage(msg.chat.id,
 `🐰 <b>Расписание кроликов (по Киеву)</b>
@@ -499,7 +499,7 @@ bot.onText(/\/rabbit/, (msg) => {
 Следующий: <b>${next.label} ${next.hour}:${String(next.minute).padStart(2, '0')}</b>`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/resets/, (msg) => {
+bot.onText(/\/resets$/, (msg) => {
     if (!derbyStartTime) {
         bot.sendMessage(msg.chat.id, '❌ Дерби не установлено. Используйте /setderby');
         return;
@@ -528,14 +528,14 @@ bot.onText(/\/resets/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/clearderby/, async (msg) => {
+bot.onText(/\/clearderby$/, async (msg) => {
     await saveDerbyTime(null);
     scheduledJobs.forEach(job => job.cancel());
     scheduledJobs = [];
     bot.sendMessage(msg.chat.id, '✅ Дерби сброшено.');
 });
 
-bot.onText(/\/join/, async (msg) => {
+bot.onText(/\/join$/, async (msg) => {
     const chatId = String(msg.chat.id);
     const user = msg.from;
 
@@ -560,7 +560,7 @@ bot.onText(/\/join/, async (msg) => {
     bot.sendMessage(msg.chat.id, `✅ ${name} присоединился к скачкам!\n\nУчастников: ${chatParticipants.length}`);
 });
 
-bot.onText(/\/leave/, async (msg) => {
+bot.onText(/\/leave$/, async (msg) => {
     const chatId = String(msg.chat.id);
     const user = msg.from;
 
@@ -581,7 +581,7 @@ bot.onText(/\/leave/, async (msg) => {
     bot.sendMessage(msg.chat.id, `👋 ${name} покинул скачки.\n\nОсталось участников: ${chatParticipants.length}`);
 });
 
-bot.onText(/\/participants/, (msg) => {
+bot.onText(/\/participants$/, (msg) => {
     const chatId = String(msg.chat.id);
     const chatParticipants = getParticipantsList(chatId);
 
@@ -599,12 +599,12 @@ bot.onText(/\/participants/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/clearparticipants/, async (msg) => {
+bot.onText(/\/clearparticipants$/, async (msg) => {
     await clearParticipants(msg.chat.id);
     bot.sendMessage(msg.chat.id, '✅ Список участников очищен.');
 });
 
-bot.onText(/\/ping/, (msg) => {
+bot.onText(/\/ping$/, (msg) => {
     const mentions = getParticipantMentions(msg.chat.id);
     if (!mentions) {
         bot.sendMessage(msg.chat.id, '❌ Нет участников для пинга. Используйте /join');
@@ -613,7 +613,7 @@ bot.onText(/\/ping/, (msg) => {
     bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание участникам скачек!</b>`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/pingall/, (msg) => {
+bot.onText(/\/pingall$/, (msg) => {
     const validPlayers = players.filter(p => p.telegram && p.telegram !== '-' && p.telegram.startsWith('@'));
     if (validPlayers.length === 0) {
         bot.sendMessage(msg.chat.id, '❌ Нет игроков с telegram для пинга.');
@@ -623,7 +623,7 @@ bot.onText(/\/pingall/, (msg) => {
     bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание всем игрокам!</b>`, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/players/, (msg) => {
+bot.onText(/\/players$/, (msg) => {
     if (players.length === 0) {
         bot.sendMessage(msg.chat.id, '📋 Список игроков пуст.');
         return;
@@ -643,7 +643,7 @@ bot.onText(/\/players/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/player(?:\s+(.+))?/, (msg, match) => {
+bot.onText(/\/player(?:\s+(.+))?$/, (msg, match) => {
     const search = match[1];
 
     if (!search) {
@@ -670,7 +670,7 @@ bot.onText(/\/player(?:\s+(.+))?/, (msg, match) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
-bot.onText(/\/addplayer(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/addplayer(?:\s+(.+))?$/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -699,7 +699,7 @@ bot.onText(/\/addplayer(?:\s+(.+))?/, async (msg, match) => {
     bot.sendMessage(msg.chat.id, response);
 });
 
-bot.onText(/\/removeplayer(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/removeplayer(?:\s+(.+))?$/, async (msg, match) => {
     const search = match[1];
 
     if (!search) {
@@ -722,7 +722,7 @@ bot.onText(/\/removeplayer(?:\s+(.+))?/, async (msg, match) => {
     bot.sendMessage(msg.chat.id, `✅ Игрок удалён!\n\n🎮 ${removed.game}\n📱 ${removed.telegram}\n👤 ${removed.name}`);
 });
 
-bot.onText(/\/editplayer(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/editplayer(?:\s+(.+))?$/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -772,7 +772,7 @@ bot.onText(/\/editplayer(?:\s+(.+))?/, async (msg, match) => {
     bot.sendMessage(msg.chat.id, response);
 });
 
-bot.onText(/\/setbirthday(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/setbirthday(?:\s+(.+))?$/, async (msg, match) => {
     const input = match[1];
 
     if (!input) {
@@ -807,7 +807,7 @@ bot.onText(/\/setbirthday(?:\s+(.+))?/, async (msg, match) => {
     bot.sendMessage(msg.chat.id, `✅ День рождения установлен!\n\n🎮 ${player.game}\n🎂 ${birthday}`);
 });
 
-bot.onText(/\/birthdays/, (msg) => {
+bot.onText(/\/birthdays$/, (msg) => {
     const withBirthdays = players.filter(p => p.birthday);
 
     if (withBirthdays.length === 0) {
