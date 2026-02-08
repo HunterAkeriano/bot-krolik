@@ -395,6 +395,36 @@ bot.onText(/\/ping/, (msg) => {
     bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание участникам скачек!</b>`, { parse_mode: 'HTML' });
 });
 
+const RANDOM_PHRASES = [
+    'стояночка минуточка',
+    'На дальнем.',
+    'На ближнем.',
+    'ОУ НЕ ТОРОПИ ЛОШАДЕЙ',
+    'Фугани 5к',
+    'Где мое пиво?'
+];
+
+bot.onText(/скачки|скакать/i, (msg) => {
+    if (msg.text.startsWith('/')) return;
+    const phrase = RANDOM_PHRASES[Math.floor(Math.random() * RANDOM_PHRASES.length)];
+    bot.sendMessage(msg.chat.id, phrase);
+});
+
+const TEA_PHRASES = [
+    'ОУ КАКОЙ ЧАЙ????',
+    'У меня есть рево вместо чая, будешь?',
+    'Го по пиву - ну его нахуй тот чай',
+    'Хочешь я тебе сижку дам?',
+    'Где ты спрятал бутылку водки?',
+    'Дай 5 гривен'
+];
+
+bot.onText(/\bчай\b|\bкофе\b|\bчаю\b/i, (msg) => {
+    if (msg.text.startsWith('/')) return;
+    const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
+    bot.sendMessage(msg.chat.id, phrase);
+});
+
 loadSubscribers();
 scheduleRabbitNotifications();
 scheduleDerbyResets();
