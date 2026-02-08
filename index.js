@@ -1109,11 +1109,25 @@ bot.on('message', async (msg) => {
         return;
     }
 
+    if (/^монетка\s+@\w+/i.test(text)) {
+        const targetUsername = text.match(/@(\w+)/)[1];
+        bot.sendMessage(chatId, `🪙 ${getUserMention(user)} вызывает @${targetUsername} на монетку!\n\n@${targetUsername}, напишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
+        duelChallenges.set(chatKey + '_coin', {
+            challenger: user,
+            targetUsername: targetUsername.toLowerCase(),
+            time: Date.now()
+        });
+        return;
+    }
+
     if (text === 'орёл' || text === 'орел' || text === 'решка') {
         const coinChallenge = duelChallenges.get(chatKey + '_coin');
         if (!coinChallenge) return;
         if (coinChallenge.challenger.id === user.id) {
             bot.sendMessage(chatId, '❌ Нельзя играть с самим собой!');
+            return;
+        }
+        if (coinChallenge.targetUsername && user.username?.toLowerCase() !== coinChallenge.targetUsername) {
             return;
         }
 
