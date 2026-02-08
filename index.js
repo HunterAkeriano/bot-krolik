@@ -2,8 +2,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const schedule = require('node-schedule');
 const { Pool } = require('pg');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN';
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:iHJFUqFoOcTrkwBeeLcRUEYBuTzVuMbY@turntable.proxy.rlwy.net:51550/railway';
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const DATABASE_URL = process.env.DATABASE_URL;
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
