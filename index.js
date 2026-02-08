@@ -38,6 +38,36 @@ function getUserMention(user) {
     return `<a href="tg://user?id=${user.id}">${user.first_name}</a>`;
 }
 
+function normalizeUsername(username) {
+    return username.replace(/^@/, '').toLowerCase();
+}
+
+async function findUserIdByUsername(chatId, username) {
+    const normalized = normalizeUsername(username);
+    const chatParticipants = participants.get(String(chatId)) || [];
+    const localMatch = chatParticipants.find(p => p.username && p.username.toLowerCase() === normalized);
+    if (localMatch) return localMatch.id;
+
+    const client = await pool.connect();
+    try {
+        let result = await client.query(
+            'SELECT user_id FROM participants WHERE chat_id = $1 AND LOWER(username) = $2 LIMIT 1',
+            [chatId, normalized]
+        );
+        if (result.rows.length > 0) return result.rows[0].user_id;
+
+        result = await client.query(
+            'SELECT user_id FROM message_stats WHERE chat_id = $1 AND LOWER(username) = $2 LIMIT 1',
+            [chatId, normalized]
+        );
+        if (result.rows.length > 0) return result.rows[0].user_id;
+    } finally {
+        client.release();
+    }
+
+    return null;
+}
+
 const DEFAULT_PLAYERS = [
     { game: 'Монблан', telegram: '@Matricariay', name: 'Лана', birthday: '14.07' },
     { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий', birthday: '29.07' },
@@ -675,6 +705,47 @@ bot.onText(/\/clearderby$/, async (msg) => {
     bot.sendMessage(msg.chat.id, '✅ Дерби сброшено.');
 });
 
+bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const input = match[1];
+    let targetUserId = null;
+    let targetLabel = null;
+
+    if (!input) {
+        if (msg.reply_to_message) {
+            targetUserId = msg.reply_to_message.from.id;
+            targetLabel = getUserMention(msg.reply_to_message.from);
+        } else {
+            bot.sendMessage(chatId, '❌ Укажи ник: говори @username');
+            return;
+        }
+    } else {
+        const username = input.trim().split(/\s+/)[0];
+        if (!username.startsWith('@')) {
+            bot.sendMessage(chatId, '❌ Укажи ник в формате @username');
+            return;
+        }
+        targetUserId = await findUserIdByUsername(chatId, username);
+        if (!targetUserId) {
+            bot.sendMessage(chatId, `❌ Не могу найти ${username}. Пусть он напишет что-то в чат.`);
+            return;
+        }
+        targetLabel = username;
+    }
+
+    await bot.restrictChatMember(chatId, targetUserId, {
+        permissions: {
+            can_send_messages: true,
+            can_send_media_messages: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true
+        }
+    }).catch(() => {});
+
+    bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
+});
+
 bot.onText(/\/join$/, async (msg) => {
     const chatId = String(msg.chat.id);
     const user = msg.from;
@@ -1092,6 +1163,7 @@ async function askAI(question) {
 
 bot.on('message', async (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
+    if (/^говори\b/i.test(msg.text)) return;
 
     const text = msg.text.toLowerCase().trim();
     const chatId = msg.chat.id;
