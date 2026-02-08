@@ -203,6 +203,25 @@ async function updatePlayerBirthday(playerId, birthday) {
     }
 }
 
+async function updatePlayer(playerId, data) {
+    const client = await pool.connect();
+    try {
+        await client.query(
+            'UPDATE players SET game = $1, telegram = $2, name = $3, birthday = $4 WHERE id = $5',
+            [data.game, data.telegram, data.name, data.birthday, playerId]
+        );
+        const player = players.find(p => p.id === playerId);
+        if (player) {
+            player.game = data.game;
+            player.telegram = data.telegram;
+            player.name = data.name;
+            player.birthday = data.birthday;
+        }
+    } finally {
+        client.release();
+    }
+}
+
 function getParticipantMentions(chatId) {
     const chatParticipants = participants.get(String(chatId)) || [];
     if (chatParticipants.length === 0) return '';
@@ -376,12 +395,14 @@ bot.onText(/\/start/, async (msg) => {
 /join - Присоединиться к скачкам
 /leave - Покинуть скачки
 /participants - Список участников
-/ping - Пингануть всех участников
+/ping - Пингануть участников скачек
+/pingall - Пингануть всех игроков
 
 <b>Игроки:</b>
 /players - Список всех игроков
 /player [ник] - Найти игрока
 /addplayer - Добавить игрока
+/editplayer - Редактировать игрока
 /removeplayer [ник] - Удалить игрока
 /birthdays - Дни рождения
 /setbirthday - Установить день рождения
@@ -592,6 +613,16 @@ bot.onText(/\/ping/, (msg) => {
     bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание участникам скачек!</b>`, { parse_mode: 'HTML' });
 });
 
+bot.onText(/\/pingall/, (msg) => {
+    const validPlayers = players.filter(p => p.telegram && p.telegram !== '-' && p.telegram.startsWith('@'));
+    if (validPlayers.length === 0) {
+        bot.sendMessage(msg.chat.id, '❌ Нет игроков с telegram для пинга.');
+        return;
+    }
+    const mentions = validPlayers.map(p => p.telegram).join(' ');
+    bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание всем игрокам!</b>`, { parse_mode: 'HTML' });
+});
+
 bot.onText(/\/players/, (msg) => {
     if (players.length === 0) {
         bot.sendMessage(msg.chat.id, '📋 Список игроков пуст.');
@@ -689,6 +720,56 @@ bot.onText(/\/removeplayer(?:\s+(.+))?/, async (msg, match) => {
 
     const removed = await removePlayer(index);
     bot.sendMessage(msg.chat.id, `✅ Игрок удалён!\n\n🎮 ${removed.game}\n📱 ${removed.telegram}\n👤 ${removed.name}`);
+});
+
+bot.onText(/\/editplayer(?:\s+(.+))?/, async (msg, match) => {
+    const input = match[1];
+
+    if (!input) {
+        bot.sendMessage(msg.chat.id,
+`✏️ <b>Редактировать игрока</b>
+
+Формат: /editplayer СтарыйНик | НовыйНик | @telegram | Имя | ДД.ММ
+
+Пример: /editplayer Монблан | Монблан2 | @NewTelegram | Лана | 14.07
+
+Поля которые не нужно менять можно оставить пустыми:
+/editplayer Монблан | | @NewTelegram | |`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    const parts = input.split('|').map(s => s.trim());
+    if (parts.length < 2) {
+        bot.sendMessage(msg.chat.id, '❌ Неверный формат.');
+        return;
+    }
+
+    const [search, ...rest] = parts;
+    const searchLower = search.toLowerCase();
+    const player = players.find(p =>
+        p.game.toLowerCase().includes(searchLower) ||
+        p.telegram.toLowerCase().includes(searchLower)
+    );
+
+    if (!player) {
+        bot.sendMessage(msg.chat.id, `❌ Игрок "${search}" не найден.`);
+        return;
+    }
+
+    const [newGame, newTelegram, newName, newBirthday] = rest;
+
+    const updatedData = {
+        game: newGame || player.game,
+        telegram: newTelegram || player.telegram,
+        name: newName || player.name,
+        birthday: newBirthday || player.birthday
+    };
+
+    await updatePlayer(player.id, updatedData);
+
+    let response = `✅ Игрок обновлён!\n\n🎮 ${updatedData.game}\n📱 ${updatedData.telegram}\n👤 ${updatedData.name}`;
+    if (updatedData.birthday) response += `\n🎂 ${updatedData.birthday}`;
+    bot.sendMessage(msg.chat.id, response);
 });
 
 bot.onText(/\/setbirthday(?:\s+(.+))?/, async (msg, match) => {
