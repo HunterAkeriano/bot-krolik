@@ -880,7 +880,7 @@ const BOT_PHRASES = [
 ];
 
 async function askGemini(question) {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
     const prompt = `Ты - современный подросток который общается в чате. Отвечай на вопросы используя молодежный сленг, такие слова как: краш, рофл, чилить, вайб, кринж, имба, изи, база, лол, орать (в смысле смеяться), душнить, агриться, флексить, зашквар, топ, пруфы и т.д. Отвечай коротко, дерзко и по делу. Можешь использовать эмодзи но не переборщи.
 
 Вопрос: ${question}`;
