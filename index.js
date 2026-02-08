@@ -88,15 +88,24 @@ async function getKnownUserIds(chatId) {
 }
 
 async function unrestrictUser(chatId, userId) {
-    return bot.restrictChatMember(chatId, userId, {
-        permissions: {
-            can_send_messages: true,
-            can_send_media_messages: true,
-            can_send_polls: true,
-            can_send_other_messages: true,
-            can_add_web_page_previews: true
+    let chatPermissions = null;
+    try {
+        const chat = await bot.getChat(chatId);
+        if (chat && chat.permissions) {
+            chatPermissions = { ...chat.permissions };
         }
-    });
+    } catch {}
+
+    const permissions = chatPermissions || {
+        can_send_messages: true,
+        can_send_media_messages: true,
+        can_send_polls: true,
+        can_send_other_messages: true,
+        can_add_web_page_previews: true
+    };
+    permissions.can_send_messages = true;
+
+    return bot.restrictChatMember(chatId, userId, { permissions });
 }
 
 const DEFAULT_PLAYERS = [
@@ -765,6 +774,13 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
     }
 
     try {
+        await bot.setChatPermissions(chatId, {
+            can_send_messages: true,
+            can_send_media_messages: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true
+        });
         await unrestrictUser(chatId, targetUserId);
     } catch (error) {
         bot.sendMessage(chatId, `❌ Ошибка размута: ${error.message || error}`);
@@ -802,6 +818,70 @@ bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
     }
 
     bot.sendMessage(chatId, `✅ Размучено: ${ok} пользователей. Ошибок: ${failed}.`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/^\/?размутить_чат(?:@[\w_]+)?$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    try {
+        await bot.setChatPermissions(chatId, {
+            can_send_messages: true,
+            can_send_media_messages: true,
+            can_send_polls: true,
+            can_send_other_messages: true,
+            can_add_web_page_previews: true
+        });
+        bot.sendMessage(chatId, '✅ Чат размучен.', { parse_mode: 'HTML' });
+    } catch (error) {
+        bot.sendMessage(chatId, `❌ Ошибка размута чата: ${error.message || error}`);
+    }
+});
+
+bot.onText(/^\/?debugmute(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const input = match[1];
+    let targetUserId = null;
+    let targetLabel = null;
+
+    if (!input) {
+        if (msg.reply_to_message) {
+            targetUserId = msg.reply_to_message.from.id;
+            targetLabel = getUserMention(msg.reply_to_message.from);
+        } else {
+            bot.sendMessage(chatId, '❌ Укажи ник: /debugmute @username');
+            return;
+        }
+    } else {
+        const username = input.trim().split(/\s+/)[0];
+        if (!username.startsWith('@')) {
+            bot.sendMessage(chatId, '❌ Укажи ник в формате @username');
+            return;
+        }
+        targetUserId = await findUserIdByUsername(chatId, username);
+        if (!targetUserId) {
+            bot.sendMessage(chatId, `❌ Не могу найти ${username}. Пусть он напишет что-то в чат.`);
+            return;
+        }
+        targetLabel = username;
+    }
+
+    try {
+        const chat = await bot.getChat(chatId);
+        const member = await bot.getChatMember(chatId, targetUserId);
+        const chatPerms = chat.permissions || {};
+        const memberPerms = member.permissions || {};
+
+        const lines = [];
+        lines.push(`Чат: ${chat.title || chatId}`);
+        lines.push(`Пользователь: ${targetLabel || targetUserId}`);
+        lines.push(`Статус: ${member.status}`);
+        lines.push(`can_send_messages (чат): ${chatPerms.can_send_messages !== undefined ? chatPerms.can_send_messages : 'null'}`);
+        lines.push(`can_send_messages (юзер): ${memberPerms.can_send_messages !== undefined ? memberPerms.can_send_messages : 'null'}`);
+        lines.push(`until_date: ${member.until_date || 0}`);
+
+        bot.sendMessage(chatId, lines.join('\n'));
+    } catch (error) {
+        bot.sendMessage(chatId, `❌ Ошибка debug: ${error.message || error}`);
+    }
 });
 
 bot.onText(/\/join$/, async (msg) => {
