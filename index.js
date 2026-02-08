@@ -921,13 +921,46 @@ bot.on('message', async (msg) => {
     const chatKey = getDuelKey(chatId);
     const user = msg.from;
 
-    console.log('Message received:', text);
+    if (text === 'монетка' || text === 'кто монетка') {
+        bot.sendMessage(chatId, `🪙 ${getUserMention(user)} предлагает сыграть в монетку!\n\nНапишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
+        duelChallenges.set(chatKey + '_coin', {
+            challenger: user,
+            time: Date.now()
+        });
+        return;
+    }
+
+    if (text === 'орёл' || text === 'орел' || text === 'решка') {
+        const coinChallenge = duelChallenges.get(chatKey + '_coin');
+        if (!coinChallenge) return;
+        if (coinChallenge.challenger.id === user.id) {
+            bot.sendMessage(chatId, '❌ Нельзя играть с самим собой!');
+            return;
+        }
+
+        duelChallenges.delete(chatKey + '_coin');
+        const player1 = coinChallenge.challenger;
+        const player2 = user;
+        const player2Choice = text === 'решка' ? 'решка' : 'орёл';
+        const player1Choice = player2Choice === 'орёл' ? 'решка' : 'орёл';
+
+        const result = Math.random() < 0.5 ? 'орёл' : 'решка';
+        const coin = result === 'орёл' ? '🦅' : '🪙';
+
+        const winner = result === player1Choice ? player1 : player2;
+        const loser = result === player1Choice ? player2 : player1;
+
+        bot.sendMessage(chatId, `🪙 Монетка крутится...\n\n${getUserMention(player1)}: ${player1Choice}\n${getUserMention(player2)}: ${player2Choice}\n\n${coin} Выпало: <b>${result.toUpperCase()}</b>!\n\n🏆 Победитель: ${getUserMention(winner)}\n💀 ${getUserMention(loser)} молчит 1 минуту! 🤐`, { parse_mode: 'HTML' });
+
+        bot.restrictChatMember(chatId, loser.id, {
+            until_date: Math.floor(Date.now() / 1000) + 60,
+            permissions: { can_send_messages: false }
+        }).catch(() => {});
+        return;
+    }
 
     if (text === 'кто дуэль' || text === 'кто дуель') {
-        console.log('Duel challenge triggered');
-        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' })
-            .then(() => console.log('Message sent'))
-            .catch(err => console.error('Send error:', err));
+        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey, {
             challenger: user,
             time: Date.now()
@@ -1019,7 +1052,7 @@ bot.on('message', async (msg) => {
 
         const opponent = duel.player1.id === user.id ? duel.player2 : duel.player1;
         const aimBonus = duel.aim[user.id] || 0;
-        const hitChance = 40 + aimBonus;
+        const hitChance = 60 + aimBonus;
         const hit = Math.random() * 100 < hitChance;
 
         duel.aim[user.id] = 0;
