@@ -104,10 +104,18 @@ async function unrestrictUser(chatId, userId) {
         can_manage_topics: true
     };
 
-    return bot.restrictChatMember(chatId, userId, {
-        permissions,
-        use_independent_chat_permissions: false
+    const url = `https://api.telegram.org/bot${TOKEN}/restrictChatMember`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: chatId,
+            user_id: userId,
+            permissions: permissions,
+            use_independent_chat_permissions: false
+        })
     });
+    return response.json();
 }
 
 const DEFAULT_PLAYERS = [
@@ -778,16 +786,16 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
     try {
         console.log(`Unrestricting user ${targetUserId} in chat ${chatId}`);
         const result = await unrestrictUser(chatId, targetUserId);
-        console.log('Unrestrict result:', JSON.stringify(result));
+        console.log('Unrestrict API response:', JSON.stringify(result));
 
         const member = await bot.getChatMember(chatId, targetUserId);
         console.log('Member after unrestrict:', JSON.stringify(member));
 
-        const debugInfo = `chatId: ${chatId}\nuserId: ${targetUserId}\nstatus: ${member.status}\ncan_send: ${member.can_send_messages}`;
-        bot.sendMessage(chatId, `✅ ${targetLabel} размучен.\n\nDebug:\n${debugInfo}`, { parse_mode: 'HTML' });
+        const debugInfo = `API: ${JSON.stringify(result)}\nstatus: ${member.status}\ncan_send: ${member.can_send_messages}`;
+        bot.sendMessage(chatId, `${targetLabel} Debug:\n${debugInfo}`, { parse_mode: 'HTML' });
     } catch (error) {
         console.error('Unrestrict error:', error);
-        bot.sendMessage(chatId, `❌ Ошибка размута: ${JSON.stringify(error.response?.body || error.message || error)}`);
+        bot.sendMessage(chatId, `❌ Ошибка: ${JSON.stringify(error.response?.body || error.message || error)}`);
     }
 });
 
