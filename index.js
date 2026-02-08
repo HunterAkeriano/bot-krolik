@@ -774,10 +774,18 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
     }
 
     try {
-        await unrestrictUser(chatId, targetUserId);
-        bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
+        console.log(`Unrestricting user ${targetUserId} in chat ${chatId}`);
+        const result = await unrestrictUser(chatId, targetUserId);
+        console.log('Unrestrict result:', JSON.stringify(result));
+
+        const member = await bot.getChatMember(chatId, targetUserId);
+        console.log('Member after unrestrict:', JSON.stringify(member));
+
+        const debugInfo = `chatId: ${chatId}\nuserId: ${targetUserId}\nstatus: ${member.status}\ncan_send: ${member.can_send_messages}`;
+        bot.sendMessage(chatId, `✅ ${targetLabel} размучен.\n\nDebug:\n${debugInfo}`, { parse_mode: 'HTML' });
     } catch (error) {
-        bot.sendMessage(chatId, `❌ Ошибка размута: ${error.message || error}`);
+        console.error('Unrestrict error:', error);
+        bot.sendMessage(chatId, `❌ Ошибка размута: ${JSON.stringify(error.response?.body || error.message || error)}`);
     }
 });
 
