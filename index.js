@@ -404,12 +404,6 @@ const RANDOM_PHRASES = [
     'Где мое пиво?'
 ];
 
-bot.onText(/скачки|скакать/i, (msg) => {
-    if (msg.text.startsWith('/')) return;
-    const phrase = RANDOM_PHRASES[Math.floor(Math.random() * RANDOM_PHRASES.length)];
-    bot.sendMessage(msg.chat.id, phrase);
-});
-
 const TEA_PHRASES = [
     'ОУ КАКОЙ ЧАЙ????',
     'У меня есть рево вместо чая, будешь?',
@@ -419,10 +413,22 @@ const TEA_PHRASES = [
     'Дай 5 гривен'
 ];
 
-bot.onText(/\bчай\b|\bкофе\b|\bчаю\b/i, (msg) => {
-    if (msg.text.startsWith('/')) return;
-    const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
-    bot.sendMessage(msg.chat.id, phrase);
+bot.on('message', (msg) => {
+    if (!msg.text || msg.text.startsWith('/')) return;
+
+    const text = msg.text.toLowerCase();
+
+    if (/скачки|скакать/.test(text)) {
+        const phrase = RANDOM_PHRASES[Math.floor(Math.random() * RANDOM_PHRASES.length)];
+        bot.sendMessage(msg.chat.id, phrase);
+        return;
+    }
+
+    if (/\bчай\b|\bкофе\b|\bчаю\b/.test(text)) {
+        const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
+        bot.sendMessage(msg.chat.id, phrase);
+        return;
+    }
 });
 
 loadSubscribers();
