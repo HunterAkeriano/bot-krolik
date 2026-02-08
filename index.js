@@ -22,6 +22,22 @@ let scheduledJobs = [];
 let participants = new Map();
 let players = [];
 
+let duelChallenges = new Map();
+let activeDuels = new Map();
+
+function getDuelKey(chatId) {
+    return String(chatId);
+}
+
+function getUserName(user) {
+    return user.username ? `@${user.username}` : user.first_name;
+}
+
+function getUserMention(user) {
+    if (user.username) return `@${user.username}`;
+    return `<a href="tg://user?id=${user.id}">${user.first_name}</a>`;
+}
+
 const DEFAULT_PLAYERS = [
     { game: 'Монблан', telegram: '@Matricariay', name: 'Лана', birthday: '14.07' },
     { game: 'PRINCE', telegram: '@DimaSedokov', name: 'Дмитрий', birthday: '29.07' },
@@ -900,7 +916,160 @@ async function askAI(question) {
 bot.on('message', async (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
 
-    const text = msg.text.toLowerCase();
+    const text = msg.text.toLowerCase().trim();
+    const chatId = msg.chat.id;
+    const chatKey = getDuelKey(chatId);
+    const user = msg.from;
+
+    if (text === 'кто дуэль' || text === 'кто дуель') {
+        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' });
+        duelChallenges.set(chatKey, {
+            challenger: user,
+            time: Date.now()
+        });
+        return;
+    }
+
+    if (/^дуэль\s+@\w+/.test(text)) {
+        const targetUsername = text.match(/@(\w+)/)[1];
+        bot.sendMessage(chatId, `🔫 ${getUserMention(user)} вызывает @${targetUsername} на дуэль!\n\n@${targetUsername}, напишите "дуэль да" чтобы принять или "дуэль нет" чтобы отклонить.`, { parse_mode: 'HTML' });
+        duelChallenges.set(chatKey, {
+            challenger: user,
+            targetUsername: targetUsername.toLowerCase(),
+            time: Date.now()
+        });
+        return;
+    }
+
+    if (text === 'дуэль да' || text === 'дуель да') {
+        const challenge = duelChallenges.get(chatKey);
+        if (!challenge) {
+            bot.sendMessage(chatId, '❌ Нет активного вызова на дуэль.');
+            return;
+        }
+        if (challenge.challenger.id === user.id) {
+            bot.sendMessage(chatId, '❌ Нельзя принять свой же вызов!');
+            return;
+        }
+        if (challenge.targetUsername && user.username?.toLowerCase() !== challenge.targetUsername) {
+            bot.sendMessage(chatId, '❌ Этот вызов адресован другому игроку.');
+            return;
+        }
+
+        duelChallenges.delete(chatKey);
+        const duel = {
+            player1: challenge.challenger,
+            player2: user,
+            turn: Math.random() < 0.5 ? challenge.challenger.id : user.id,
+            aim: { [challenge.challenger.id]: 0, [user.id]: 0 },
+            hp: { [challenge.challenger.id]: 1, [user.id]: 1 }
+        };
+        activeDuels.set(chatKey, duel);
+
+        const firstPlayer = duel.turn === duel.player1.id ? duel.player1 : duel.player2;
+        bot.sendMessage(chatId, `⚔️ <b>ДУЭЛЬ НАЧАЛАСЬ!</b>\n\n${getUserMention(duel.player1)} ⚔️ ${getUserMention(duel.player2)}\n\nПервый ход: ${getUserMention(firstPlayer)}\n\nКоманды:\n• выстрел - стрелять\n• прицелиться - +20% к шансу попадания\n• сбросить прицел - сбросить бонусы`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (text === 'дуэль нет' || text === 'дуель нет') {
+        const challenge = duelChallenges.get(chatKey);
+        if (!challenge) {
+            bot.sendMessage(chatId, '❌ Нет активного вызова на дуэль.');
+            return;
+        }
+        if (challenge.targetUsername && user.username?.toLowerCase() !== challenge.targetUsername) {
+            return;
+        }
+        duelChallenges.delete(chatKey);
+        bot.sendMessage(chatId, `${getUserMention(user)} отклонил вызов на дуэль.`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (text === 'дуэль отмена' || text === 'дуель отмена') {
+        const challenge = duelChallenges.get(chatKey);
+        if (challenge && challenge.challenger.id === user.id) {
+            duelChallenges.delete(chatKey);
+            bot.sendMessage(chatId, '❌ Вызов на дуэль отменён.');
+            return;
+        }
+        const duel = activeDuels.get(chatKey);
+        if (duel && (duel.player1.id === user.id || duel.player2.id === user.id)) {
+            activeDuels.delete(chatKey);
+            bot.sendMessage(chatId, `🏳️ ${getUserMention(user)} сдался! Дуэль окончена.`, { parse_mode: 'HTML' });
+            return;
+        }
+        bot.sendMessage(chatId, '❌ Нечего отменять.');
+        return;
+    }
+
+    if (text === 'выстрел') {
+        const duel = activeDuels.get(chatKey);
+        if (!duel) {
+            return;
+        }
+        if (duel.turn !== user.id) {
+            bot.sendMessage(chatId, '❌ Сейчас не твой ход!');
+            return;
+        }
+
+        const opponent = duel.player1.id === user.id ? duel.player2 : duel.player1;
+        const aimBonus = duel.aim[user.id] || 0;
+        const hitChance = 40 + aimBonus;
+        const hit = Math.random() * 100 < hitChance;
+
+        duel.aim[user.id] = 0;
+
+        if (hit) {
+            activeDuels.delete(chatKey);
+            bot.sendMessage(chatId, `🔫 <b>БАХ!</b>\n\n${getUserMention(user)} попал в ${getUserMention(opponent)}!\n\n🏆 Победитель: ${getUserMention(user)}\n\n${getUserMention(opponent)} молчит 5 минут! 🤐`, { parse_mode: 'HTML' });
+
+            bot.restrictChatMember(chatId, opponent.id, {
+                until_date: Math.floor(Date.now() / 1000) + 300,
+                permissions: {
+                    can_send_messages: false,
+                    can_send_media_messages: false,
+                    can_send_other_messages: false
+                }
+            }).catch(() => {});
+        } else {
+            duel.turn = opponent.id;
+            bot.sendMessage(chatId, `🔫 ${getUserMention(user)} выстрелил и промахнулся!\n\nХод переходит к ${getUserMention(opponent)}`, { parse_mode: 'HTML' });
+        }
+        return;
+    }
+
+    if (text === 'прицелиться') {
+        const duel = activeDuels.get(chatKey);
+        if (!duel) {
+            return;
+        }
+        if (duel.turn !== user.id) {
+            bot.sendMessage(chatId, '❌ Сейчас не твой ход!');
+            return;
+        }
+
+        const opponent = duel.player1.id === user.id ? duel.player2 : duel.player1;
+        duel.aim[user.id] = (duel.aim[user.id] || 0) + 20;
+        duel.turn = opponent.id;
+
+        bot.sendMessage(chatId, `🎯 ${getUserMention(user)} прицеливается... (+20% к попаданию, всего: ${duel.aim[user.id]}%)\n\nХод переходит к ${getUserMention(opponent)}`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (text === 'сбросить прицел') {
+        const duel = activeDuels.get(chatKey);
+        if (!duel) {
+            return;
+        }
+        if (duel.turn !== user.id) {
+            bot.sendMessage(chatId, '❌ Сейчас не твой ход!');
+            return;
+        }
+
+        duel.aim[user.id] = 0;
+        bot.sendMessage(chatId, `${getUserMention(user)} сбросил прицел.`, { parse_mode: 'HTML' });
+        return;
+    }
 
     if (/^ии\s+/i.test(msg.text)) {
         const question = msg.text.replace(/^ии\s+/i, '').trim();
