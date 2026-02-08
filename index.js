@@ -89,15 +89,9 @@ async function getKnownUserIds(chatId) {
 
 async function unrestrictUser(chatId, userId) {
     return bot.restrictChatMember(chatId, userId, {
-        until_date: 0,
         permissions: {
             can_send_messages: true,
-            can_send_audios: true,
-            can_send_documents: true,
-            can_send_photos: true,
-            can_send_videos: true,
-            can_send_video_notes: true,
-            can_send_voice_notes: true,
+            can_send_media_messages: true,
             can_send_polls: true,
             can_send_other_messages: true,
             can_add_web_page_previews: true
@@ -770,7 +764,12 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
         targetLabel = username;
     }
 
-    await unrestrictUser(chatId, targetUserId).catch(() => {});
+    try {
+        await unrestrictUser(chatId, targetUserId);
+    } catch (error) {
+        bot.sendMessage(chatId, `❌ Ошибка размута: ${error.message || error}`);
+        return;
+    }
 
     bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
 });
@@ -792,14 +791,17 @@ bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
     }
 
     let ok = 0;
+    let failed = 0;
     for (const id of allIds) {
         try {
             await unrestrictUser(chatId, id);
             ok++;
-        } catch {}
+        } catch {
+            failed++;
+        }
     }
 
-    bot.sendMessage(chatId, `✅ Размучено: ${ok} пользователей.`, { parse_mode: 'HTML' });
+    bot.sendMessage(chatId, `✅ Размучено: ${ok} пользователей. Ошибок: ${failed}.`, { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/join$/, async (msg) => {
