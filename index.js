@@ -1,0 +1,402 @@
+const TelegramBot = require('node-telegram-bot-api');
+const schedule = require('node-schedule');
+const fs = require('fs');
+const path = require('path');
+
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN';
+const DATA_FILE = path.join(__dirname, 'subscribers.json');
+
+const bot = new TelegramBot(TOKEN, { polling: true });
+
+let subscribers = new Set();
+let derbyStartTime = null;
+let scheduledJobs = [];
+let participants = new Map();
+
+function loadSubscribers() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+            subscribers = new Set(data.subscribers || []);
+            derbyStartTime = data.derbyStartTime ? new Date(data.derbyStartTime) : null;
+            participants = new Map(Object.entries(data.participants || {}));
+        }
+    } catch (e) {
+        subscribers = new Set();
+    }
+}
+
+function saveSubscribers() {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({
+        subscribers: [...subscribers],
+        derbyStartTime: derbyStartTime ? derbyStartTime.toISOString() : null,
+        participants: Object.fromEntries(participants)
+    }));
+}
+
+function getParticipantMentions(chatId) {
+    const chatParticipants = participants.get(String(chatId)) || [];
+    if (chatParticipants.length === 0) return '';
+    return chatParticipants.map(p => {
+        if (p.username) return `@${p.username}`;
+        return `<a href="tg://user?id=${p.id}">${p.name}</a>`;
+    }).join(' ');
+}
+
+function getParticipantsList(chatId) {
+    return participants.get(String(chatId)) || [];
+}
+
+function broadcast(message, withMentions = false) {
+    subscribers.forEach(chatId => {
+        let finalMessage = message;
+        if (withMentions) {
+            const mentions = getParticipantMentions(chatId);
+            if (mentions) {
+                finalMessage = `${mentions}\n\n${message}`;
+            }
+        }
+        bot.sendMessage(chatId, finalMessage, { parse_mode: 'HTML' }).catch(() => {});
+    });
+}
+
+const RABBIT_TIMES_KYIV = [
+    { day: 2, hour: 14, minute: 35, label: 'Вторник' },
+    { day: 3, hour: 20, minute: 50, label: 'Среда' },
+    { day: 5, hour: 19, minute: 50, label: 'Пятница' }
+];
+
+function scheduleRabbitNotifications() {
+    RABBIT_TIMES_KYIV.forEach(rabbit => {
+        const rule = new schedule.RecurrenceRule();
+        rule.dayOfWeek = rabbit.day;
+        rule.hour = rabbit.hour;
+        rule.minute = rabbit.minute;
+        rule.tz = 'Europe/Kyiv';
+
+        schedule.scheduleJob(rule, () => {
+            broadcast(`🐰 <b>КРОЛИК ПРИСКАКАЛ!</b>\n\n${rabbit.label} ${rabbit.hour}:${String(rabbit.minute).padStart(2, '0')} по Киеву\n\nВремя делать задания с бонусом!`, true);
+        });
+
+        const preRule = new schedule.RecurrenceRule();
+        preRule.dayOfWeek = rabbit.day;
+        preRule.hour = rabbit.hour;
+        preRule.minute = rabbit.minute - 10;
+        preRule.tz = 'Europe/Kyiv';
+
+        schedule.scheduleJob(preRule, () => {
+            broadcast(`⏰ <b>Через 10 минут прискачет кролик!</b>\n\nГотовьте задания!`, true);
+        });
+    });
+}
+
+function scheduleDerbyResets() {
+    scheduledJobs.forEach(job => job.cancel());
+    scheduledJobs = [];
+
+    if (!derbyStartTime) return;
+
+    const resetOffsets = [
+        { hours: 0, label: 'Старт дерби! Доступно 5 заданий' },
+        { hours: 11, label: 'Первый сброс! +5 заданий (всего 10)' },
+        { hours: 30, label: 'Второй сброс! +5 заданий (всего 15)' },
+        { hours: 54, label: 'Третий сброс! +5 заданий (всего 20)' },
+        { hours: 78, label: 'Четвёртый сброс! +5 заданий (всего 25)' },
+        { hours: 102, label: 'Пятый сброс! +5 заданий (всего 30)' },
+        { hours: 126, label: 'Шестой сброс! +5 заданий (всего 35)' }
+    ];
+
+    resetOffsets.forEach((reset, index) => {
+        const resetTime = new Date(derbyStartTime.getTime() + reset.hours * 60 * 60 * 1000);
+
+        if (resetTime > new Date()) {
+            const job = schedule.scheduleJob(resetTime, () => {
+                broadcast(`🏇 <b>${reset.label}</b>\n\nСброс #${index + 1} из 7`, true);
+            });
+            if (job) scheduledJobs.push(job);
+
+            const preNotifyTime = new Date(resetTime.getTime() - 30 * 60 * 1000);
+            if (preNotifyTime > new Date()) {
+                const preJob = schedule.scheduleJob(preNotifyTime, () => {
+                    broadcast(`⏰ <b>Через 30 минут сброс заданий!</b>\n\n${reset.label}`, true);
+                });
+                if (preJob) scheduledJobs.push(preJob);
+            }
+        }
+    });
+}
+
+function getNextRabbit() {
+    const now = new Date();
+    const kyivNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
+    const currentDay = kyivNow.getDay();
+    const currentMinutes = kyivNow.getHours() * 60 + kyivNow.getMinutes();
+
+    for (const rabbit of RABBIT_TIMES_KYIV) {
+        const rabbitMinutes = rabbit.hour * 60 + rabbit.minute;
+        if (rabbit.day > currentDay || (rabbit.day === currentDay && rabbitMinutes > currentMinutes)) {
+            return rabbit;
+        }
+    }
+    return RABBIT_TIMES_KYIV[0];
+}
+
+function getNextResets() {
+    if (!derbyStartTime) return null;
+
+    const now = new Date();
+    const resetOffsets = [0, 11, 30, 54, 78, 102, 126];
+    const upcoming = [];
+
+    resetOffsets.forEach((hours, index) => {
+        const resetTime = new Date(derbyStartTime.getTime() + hours * 60 * 60 * 1000);
+        if (resetTime > now) {
+            upcoming.push({
+                index: index + 1,
+                time: resetTime,
+                tasks: (index + 1) * 5
+            });
+        }
+    });
+
+    return upcoming.slice(0, 3);
+}
+
+bot.onText(/\/start/, (msg) => {
+    subscribers.add(msg.chat.id);
+    saveSubscribers();
+
+    bot.sendMessage(msg.chat.id,
+`🐰 <b>Hay Day Derby Bot</b>
+
+Добро пожаловать! Я буду уведомлять вас о:
+• Появлении кролика
+• Сбросах лимитов заданий
+
+<b>Основные команды:</b>
+/status - Текущий статус
+/rabbit - Время следующего кролика
+/resets - Расписание сбросов
+
+<b>Участники скачек:</b>
+/join - Присоединиться к скачкам
+/leave - Покинуть скачки
+/participants - Список участников
+/ping - Пингануть всех участников
+
+<b>Настройки:</b>
+/setderby - Установить время старта дерби
+/subscribe - Подписаться на уведомления
+/unsubscribe - Отписаться`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/subscribe/, (msg) => {
+    subscribers.add(msg.chat.id);
+    saveSubscribers();
+    bot.sendMessage(msg.chat.id, '✅ Вы подписаны на уведомления!');
+});
+
+bot.onText(/\/unsubscribe/, (msg) => {
+    subscribers.delete(msg.chat.id);
+    saveSubscribers();
+    bot.sendMessage(msg.chat.id, '❌ Вы отписаны от уведомлений.');
+});
+
+bot.onText(/\/status/, (msg) => {
+    const nextRabbit = getNextRabbit();
+    const nextResets = getNextResets();
+
+    let status = `📊 <b>Статус</b>\n\n`;
+    status += `🐰 Следующий кролик: ${nextRabbit.label} ${nextRabbit.hour}:${String(nextRabbit.minute).padStart(2, '0')} (Киев)\n\n`;
+
+    if (derbyStartTime) {
+        status += `🏇 Дерби стартовало: ${derbyStartTime.toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' })}\n`;
+        if (nextResets && nextResets.length > 0) {
+            status += `\nБлижайшие сбросы:\n`;
+            nextResets.forEach(r => {
+                status += `• Сброс #${r.index} (${r.tasks} заданий): ${r.time.toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' })}\n`;
+            });
+        }
+    } else {
+        status += `🏇 Дерби не установлено. Используйте /setderby`;
+    }
+
+    bot.sendMessage(msg.chat.id, status, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/setderby(?:\s+(.+))?/, (msg, match) => {
+    const input = match[1];
+
+    if (!input) {
+        bot.sendMessage(msg.chat.id,
+`⚙️ <b>Установка времени старта дерби</b>
+
+Формат: /setderby ДД.ММ.ГГГГ ЧЧ:ММ
+
+Пример: /setderby 10.02.2026 10:00
+
+Время указывайте по Киеву!`, { parse_mode: 'HTML' });
+        return;
+    }
+
+    const parts = input.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})/);
+    if (!parts) {
+        bot.sendMessage(msg.chat.id, '❌ Неверный формат. Пример: /setderby 10.02.2026 10:00');
+        return;
+    }
+
+    const [, day, month, year, hour, minute] = parts;
+    const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:00`;
+
+    const kyivDate = new Date(dateStr + '+02:00');
+
+    if (isNaN(kyivDate.getTime())) {
+        bot.sendMessage(msg.chat.id, '❌ Неверная дата.');
+        return;
+    }
+
+    derbyStartTime = kyivDate;
+    saveSubscribers();
+    scheduleDerbyResets();
+
+    bot.sendMessage(msg.chat.id,
+`✅ <b>Дерби установлено!</b>
+
+Старт: ${derbyStartTime.toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' })} (Киев)
+
+Я буду уведомлять о всех сбросах заданий.`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/rabbit/, (msg) => {
+    const next = getNextRabbit();
+    bot.sendMessage(msg.chat.id,
+`🐰 <b>Расписание кроликов (по Киеву)</b>
+
+• Вторник - 14:35
+• Среда - 20:50
+• Пятница - 19:50
+
+Следующий: <b>${next.label} ${next.hour}:${String(next.minute).padStart(2, '0')}</b>`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/resets/, (msg) => {
+    if (!derbyStartTime) {
+        bot.sendMessage(msg.chat.id, '❌ Дерби не установлено. Используйте /setderby');
+        return;
+    }
+
+    const resetOffsets = [
+        { hours: 0, label: 'Старт (5 заданий)' },
+        { hours: 11, label: '+11ч (10 заданий)' },
+        { hours: 30, label: '+19ч (15 заданий)' },
+        { hours: 54, label: '+24ч (20 заданий)' },
+        { hours: 78, label: '+24ч (25 заданий)' },
+        { hours: 102, label: '+24ч (30 заданий)' },
+        { hours: 126, label: '+24ч (35 заданий)' }
+    ];
+
+    let message = `🏇 <b>Расписание сбросов дерби</b>\n\n`;
+    const now = new Date();
+
+    resetOffsets.forEach((reset, index) => {
+        const resetTime = new Date(derbyStartTime.getTime() + reset.hours * 60 * 60 * 1000);
+        const isPast = resetTime <= now;
+        const marker = isPast ? '✅' : '⏳';
+        message += `${marker} ${index + 1}. ${reset.label}\n   ${resetTime.toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv' })}\n\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/clearderby/, (msg) => {
+    derbyStartTime = null;
+    scheduledJobs.forEach(job => job.cancel());
+    scheduledJobs = [];
+    saveSubscribers();
+    bot.sendMessage(msg.chat.id, '✅ Дерби сброшено.');
+});
+
+bot.onText(/\/join/, (msg) => {
+    const chatId = String(msg.chat.id);
+    const user = msg.from;
+
+    let chatParticipants = participants.get(chatId) || [];
+
+    if (chatParticipants.some(p => p.id === user.id)) {
+        bot.sendMessage(msg.chat.id, '⚠️ Вы уже в списке участников!');
+        return;
+    }
+
+    chatParticipants.push({
+        id: user.id,
+        username: user.username || null,
+        name: user.first_name + (user.last_name ? ' ' + user.last_name : '')
+    });
+
+    participants.set(chatId, chatParticipants);
+    saveSubscribers();
+
+    const name = user.username ? `@${user.username}` : user.first_name;
+    bot.sendMessage(msg.chat.id, `✅ ${name} присоединился к скачкам!\n\nУчастников: ${chatParticipants.length}`);
+});
+
+bot.onText(/\/leave/, (msg) => {
+    const chatId = String(msg.chat.id);
+    const user = msg.from;
+
+    let chatParticipants = participants.get(chatId) || [];
+    const initialLength = chatParticipants.length;
+
+    chatParticipants = chatParticipants.filter(p => p.id !== user.id);
+
+    if (chatParticipants.length === initialLength) {
+        bot.sendMessage(msg.chat.id, '⚠️ Вы не в списке участников.');
+        return;
+    }
+
+    participants.set(chatId, chatParticipants);
+    saveSubscribers();
+
+    const name = user.username ? `@${user.username}` : user.first_name;
+    bot.sendMessage(msg.chat.id, `👋 ${name} покинул скачки.\n\nОсталось участников: ${chatParticipants.length}`);
+});
+
+bot.onText(/\/participants/, (msg) => {
+    const chatId = String(msg.chat.id);
+    const chatParticipants = getParticipantsList(chatId);
+
+    if (chatParticipants.length === 0) {
+        bot.sendMessage(msg.chat.id, '📋 Список участников пуст.\n\nИспользуйте /join чтобы присоединиться!');
+        return;
+    }
+
+    let message = `📋 <b>Участники скачек (${chatParticipants.length}):</b>\n\n`;
+    chatParticipants.forEach((p, index) => {
+        const name = p.username ? `@${p.username}` : p.name;
+        message += `${index + 1}. ${name}\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/clearparticipants/, (msg) => {
+    const chatId = String(msg.chat.id);
+    participants.set(chatId, []);
+    saveSubscribers();
+    bot.sendMessage(msg.chat.id, '✅ Список участников очищен.');
+});
+
+bot.onText(/\/ping/, (msg) => {
+    const mentions = getParticipantMentions(msg.chat.id);
+    if (!mentions) {
+        bot.sendMessage(msg.chat.id, '❌ Нет участников для пинга. Используйте /join');
+        return;
+    }
+    bot.sendMessage(msg.chat.id, `${mentions}\n\n📢 <b>Внимание участникам скачек!</b>`, { parse_mode: 'HTML' });
+});
+
+loadSubscribers();
+scheduleRabbitNotifications();
+scheduleDerbyResets();
+
+console.log('🐰 Hay Day Derby Bot запущен!');

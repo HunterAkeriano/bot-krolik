@@ -1,0 +1,14 @@
+{
+  "name": "bot_krolik",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "private": true,
+  "dependencies": {
+    "node-schedule": "^2.1.1",
+    "node-telegram-bot-api": "^0.67.0"
+  }
+}
