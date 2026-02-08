@@ -88,24 +88,24 @@ async function getKnownUserIds(chatId) {
 }
 
 async function unrestrictUser(chatId, userId) {
-    let chatPermissions = null;
-    try {
-        const chat = await bot.getChat(chatId);
-        if (chat && chat.permissions) {
-            chatPermissions = { ...chat.permissions };
-        }
-    } catch {}
-
-    const permissions = chatPermissions || {
+    const permissions = {
         can_send_messages: true,
-        can_send_media_messages: true,
+        can_send_audios: true,
+        can_send_documents: true,
+        can_send_photos: true,
+        can_send_videos: true,
+        can_send_video_notes: true,
+        can_send_voice_notes: true,
         can_send_polls: true,
         can_send_other_messages: true,
-        can_add_web_page_previews: true
+        can_add_web_page_previews: true,
+        can_invite_users: true
     };
-    permissions.can_send_messages = true;
 
-    return bot.restrictChatMember(chatId, userId, { permissions });
+    return bot.restrictChatMember(chatId, userId, {
+        permissions,
+        until_date: 0
+    });
 }
 
 const DEFAULT_PLAYERS = [
@@ -774,20 +774,11 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
     }
 
     try {
-        await bot.setChatPermissions(chatId, {
-            can_send_messages: true,
-            can_send_media_messages: true,
-            can_send_polls: true,
-            can_send_other_messages: true,
-            can_add_web_page_previews: true
-        });
         await unrestrictUser(chatId, targetUserId);
+        bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
     } catch (error) {
         bot.sendMessage(chatId, `❌ Ошибка размута: ${error.message || error}`);
-        return;
     }
-
-    bot.sendMessage(chatId, `✅ ${targetLabel} размучен.`, { parse_mode: 'HTML' });
 });
 
 bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
