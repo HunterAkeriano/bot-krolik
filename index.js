@@ -424,7 +424,7 @@ bot.on('message', (msg) => {
         return;
     }
 
-    if (/\bчай\b|\bкофе\b|\bчаю\b/.test(text)) {
+    if (/чай|кофе|чаю/.test(text)) {
         const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
