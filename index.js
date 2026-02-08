@@ -921,7 +921,10 @@ bot.on('message', async (msg) => {
     const chatKey = getDuelKey(chatId);
     const user = msg.from;
 
+    console.log('Message received:', text);
+
     if (text === 'кто дуэль' || text === 'кто дуель') {
+        console.log('Duel challenge triggered');
         bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey, {
             challenger: user,
