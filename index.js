@@ -87,6 +87,31 @@ async function initDB() {
             )
         `);
 
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS message_stats (
+                chat_id BIGINT,
+                user_id BIGINT,
+                username TEXT,
+                name TEXT,
+                message_count INT DEFAULT 0,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS game_stats (
+                chat_id BIGINT,
+                user_id BIGINT,
+                username TEXT,
+                name TEXT,
+                duel_wins INT DEFAULT 0,
+                duel_losses INT DEFAULT 0,
+                coin_wins INT DEFAULT 0,
+                coin_losses INT DEFAULT 0,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        `);
+
         const playersCount = await client.query('SELECT COUNT(*) FROM players');
         if (parseInt(playersCount.rows[0].count) === 0) {
             for (const p of DEFAULT_PLAYERS) {
@@ -237,6 +262,92 @@ async function updatePlayer(playerId, data) {
             player.name = data.name;
             player.birthday = data.birthday;
         }
+    } finally {
+        client.release();
+    }
+}
+
+async function updateMessageStats(chatId, user) {
+    const client = await pool.connect();
+    try {
+        const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+        await client.query(`
+            INSERT INTO message_stats (chat_id, user_id, username, name, message_count)
+            VALUES ($1, $2, $3, $4, 1)
+            ON CONFLICT (chat_id, user_id) DO UPDATE SET
+                message_count = message_stats.message_count + 1,
+                username = $3,
+                name = $4
+        `, [chatId, user.id, user.username || null, name]);
+    } finally {
+        client.release();
+    }
+}
+
+async function updateGameStats(chatId, user, game, isWin) {
+    const client = await pool.connect();
+    try {
+        const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+        const winField = game === 'duel' ? 'duel_wins' : 'coin_wins';
+        const lossField = game === 'duel' ? 'duel_losses' : 'coin_losses';
+        const field = isWin ? winField : lossField;
+
+        await client.query(`
+            INSERT INTO game_stats (chat_id, user_id, username, name, ${field})
+            VALUES ($1, $2, $3, $4, 1)
+            ON CONFLICT (chat_id, user_id) DO UPDATE SET
+                ${field} = game_stats.${field} + 1,
+                username = $3,
+                name = $4
+        `, [chatId, user.id, user.username || null, name]);
+    } finally {
+        client.release();
+    }
+}
+
+async function getTopMessages(chatId, limit = 10) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT username, name, message_count
+            FROM message_stats
+            WHERE chat_id = $1
+            ORDER BY message_count DESC
+            LIMIT $2
+        `, [chatId, limit]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+async function getTopDuel(chatId, limit = 10) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT username, name, duel_wins, duel_losses
+            FROM game_stats
+            WHERE chat_id = $1 AND (duel_wins > 0 OR duel_losses > 0)
+            ORDER BY duel_wins DESC, duel_losses ASC
+            LIMIT $2
+        `, [chatId, limit]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+async function getTopCoin(chatId, limit = 10) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT username, name, coin_wins, coin_losses
+            FROM game_stats
+            WHERE chat_id = $1 AND (coin_wins > 0 OR coin_losses > 0)
+            ORDER BY coin_wins DESC, coin_losses ASC
+            LIMIT $2
+        `, [chatId, limit]);
+        return result.rows;
     } finally {
         client.release();
     }
@@ -426,6 +537,15 @@ bot.onText(/\/start$/, async (msg) => {
 /removeplayer [ник] - Удалить игрока
 /birthdays - Дни рождения
 /setbirthday - Установить день рождения
+
+<b>Игры:</b>
+• кто дуэль - найти соперника для дуэли
+• монетка - игра орёл/решка
+
+<b>Статистика:</b>
+/topchat - топ болтунов
+/topduel - топ дуэлянтов
+/topcoin - топ монетки
 
 <b>Настройки:</b>
 /setderby - Установить время старта дерби
@@ -853,6 +973,63 @@ bot.onText(/\/birthdays$/, (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
+bot.onText(/\/topchat$/, async (msg) => {
+    const top = await getTopMessages(msg.chat.id);
+    if (top.length === 0) {
+        bot.sendMessage(msg.chat.id, '📊 Пока нет статистики сообщений.');
+        return;
+    }
+
+    let message = '💬 <b>Топ болтунов:</b>\n\n';
+    top.forEach((u, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = u.username ? `@${u.username}` : u.name;
+        message += `${medal} ${name} — ${u.message_count} сообщений\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/topduel$/, async (msg) => {
+    const top = await getTopDuel(msg.chat.id);
+    if (top.length === 0) {
+        bot.sendMessage(msg.chat.id, '🔫 Пока нет статистики дуэлей.');
+        return;
+    }
+
+    let message = '🔫 <b>Топ дуэлянтов:</b>\n\n';
+    top.forEach((u, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = u.username ? `@${u.username}` : u.name;
+        const winrate = u.duel_wins + u.duel_losses > 0
+            ? Math.round(u.duel_wins / (u.duel_wins + u.duel_losses) * 100)
+            : 0;
+        message += `${medal} ${name} — ${u.duel_wins}W/${u.duel_losses}L (${winrate}%)\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/topcoin$/, async (msg) => {
+    const top = await getTopCoin(msg.chat.id);
+    if (top.length === 0) {
+        bot.sendMessage(msg.chat.id, '🪙 Пока нет статистики монетки.');
+        return;
+    }
+
+    let message = '🪙 <b>Топ монетки:</b>\n\n';
+    top.forEach((u, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = u.username ? `@${u.username}` : u.name;
+        const winrate = u.coin_wins + u.coin_losses > 0
+            ? Math.round(u.coin_wins / (u.coin_wins + u.coin_losses) * 100)
+            : 0;
+        message += `${medal} ${name} — ${u.coin_wins}W/${u.coin_losses}L (${winrate}%)\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
 const RANDOM_PHRASES = [
     'стояночка минуточка',
     'На дальнем.',
@@ -921,6 +1098,8 @@ bot.on('message', async (msg) => {
     const chatKey = getDuelKey(chatId);
     const user = msg.from;
 
+    updateMessageStats(chatId, user).catch(() => {});
+
     if (text === 'монетка' || text === 'кто монетка') {
         bot.sendMessage(chatId, `🪙 ${getUserMention(user)} предлагает сыграть в монетку!\n\nНапишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey + '_coin', {
@@ -949,6 +1128,9 @@ bot.on('message', async (msg) => {
 
         const winner = result === player1Choice ? player1 : player2;
         const loser = result === player1Choice ? player2 : player1;
+
+        updateGameStats(chatId, winner, 'coin', true).catch(() => {});
+        updateGameStats(chatId, loser, 'coin', false).catch(() => {});
 
         bot.sendMessage(chatId, `🪙 Монетка крутится...\n\n${getUserMention(player1)}: ${player1Choice}\n${getUserMention(player2)}: ${player2Choice}\n\n${coin} Выпало: <b>${result.toUpperCase()}</b>!\n\n🏆 Победитель: ${getUserMention(winner)}\n💀 ${getUserMention(loser)} молчит 1 минуту! 🤐`, { parse_mode: 'HTML' });
 
@@ -1059,6 +1241,9 @@ bot.on('message', async (msg) => {
 
         if (hit) {
             activeDuels.delete(chatKey);
+            updateGameStats(chatId, user, 'duel', true).catch(() => {});
+            updateGameStats(chatId, opponent, 'duel', false).catch(() => {});
+
             bot.sendMessage(chatId, `🔫 <b>БАХ!</b>\n\n${getUserMention(user)} попал в ${getUserMention(opponent)}!\n\n🏆 Победитель: ${getUserMention(user)}\n\n${getUserMention(opponent)} молчит 5 минут! 🤐`, { parse_mode: 'HTML' });
 
             bot.restrictChatMember(chatId, opponent.id, {
