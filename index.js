@@ -422,6 +422,21 @@ const GIVE_PHRASES = [
     'Умоляй меня'
 ];
 
+const WORK_PHRASES = [
+    'Какая работа ОУ!!!',
+    'От работы кони дохнут',
+    'Выключай свою работу уже хватит!!!',
+    'Сколько можно работать!!!',
+    'Кому на роду написано бык - тому кнут!'
+];
+
+const BOT_PHRASES = [
+    'Я НЕ БОТ!',
+    'Хватит меня обзывать ботом!',
+    'Вы сами как те боты',
+    'Та не...'
+];
+
 bot.on('message', (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
 
@@ -441,6 +456,18 @@ bot.on('message', (msg) => {
 
     if (/есть|дайте|пожалуйста/.test(text)) {
         const phrase = GIVE_PHRASES[Math.floor(Math.random() * GIVE_PHRASES.length)];
+        bot.sendMessage(msg.chat.id, phrase);
+        return;
+    }
+
+    if (/работаю|на работе|тружусь/.test(text)) {
+        const phrase = WORK_PHRASES[Math.floor(Math.random() * WORK_PHRASES.length)];
+        bot.sendMessage(msg.chat.id, phrase);
+        return;
+    }
+
+    if (/бот/.test(text)) {
+        const phrase = BOT_PHRASES[Math.floor(Math.random() * BOT_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
