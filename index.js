@@ -99,12 +99,14 @@ async function unrestrictUser(chatId, userId) {
         can_send_polls: true,
         can_send_other_messages: true,
         can_add_web_page_previews: true,
-        can_invite_users: true
+        can_invite_users: true,
+        can_pin_messages: true,
+        can_manage_topics: true
     };
 
     return bot.restrictChatMember(chatId, userId, {
         permissions,
-        until_date: 0
+        use_independent_chat_permissions: false
     });
 }
 
