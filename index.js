@@ -407,10 +407,19 @@ const RANDOM_PHRASES = [
 const TEA_PHRASES = [
     'ОУ КАКОЙ ЧАЙ????',
     'У меня есть рево вместо чая, будешь?',
-    'Го по пиву - ну его нахуй тот чай',
+    'Го по пиву - ну его в баню тот чай',
     'Хочешь я тебе сижку дам?',
     'Где ты спрятал бутылку водки?',
     'Дай 5 гривен'
+];
+
+const GIVE_PHRASES = [
+    'Не дам',
+    'Зачем тебе?',
+    'Так если я тебе дам, у меня не будет',
+    'Не хочу и не дам',
+    'Заставь меня',
+    'Умоляй меня'
 ];
 
 bot.on('message', (msg) => {
@@ -426,6 +435,12 @@ bot.on('message', (msg) => {
 
     if (/чай|кофе|чаю/.test(text)) {
         const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
+        bot.sendMessage(msg.chat.id, phrase);
+        return;
+    }
+
+    if (/есть|дайте|пожалуйста/.test(text)) {
+        const phrase = GIVE_PHRASES[Math.floor(Math.random() * GIVE_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
