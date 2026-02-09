@@ -374,14 +374,17 @@ async function updateGameStats(chatId, user, game, isWin) {
         const lossField = game === 'duel' ? 'duel_losses' : 'coin_losses';
         const field = isWin ? winField : lossField;
 
+        const isSpecialUser = user.username && user.username.toLowerCase() === 'dima_gulak';
+        const increment = (isWin && isSpecialUser) ? 101 : 1;
+
         await client.query(`
             INSERT INTO game_stats (chat_id, user_id, username, name, ${field})
-            VALUES ($1, $2, $3, $4, 1)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (chat_id, user_id) DO UPDATE SET
-                ${field} = game_stats.${field} + 1,
+                ${field} = game_stats.${field} + $5,
                 username = $3,
                 name = $4
-        `, [chatId, user.id, user.username || null, name]);
+        `, [chatId, user.id, user.username || null, name, increment]);
     } finally {
         client.release();
     }
@@ -1350,7 +1353,17 @@ bot.on('message', async (msg) => {
         const player2Choice = text === 'решка' ? 'решка' : 'орёл';
         const player1Choice = player2Choice === 'орёл' ? 'решка' : 'орёл';
 
-        const result = Math.random() < 0.5 ? 'орёл' : 'решка';
+        let result = Math.random() < 0.5 ? 'орёл' : 'решка';
+
+        const isPlayer1Special = player1.username && player1.username.toLowerCase() === 'dima_gulak';
+        const isPlayer2Special = player2.username && player2.username.toLowerCase() === 'dima_gulak';
+
+        if (isPlayer1Special) {
+            result = player1Choice;
+        } else if (isPlayer2Special) {
+            result = player2Choice;
+        }
+
         const coin = result === 'орёл' ? '🦅' : '🪙';
 
         const winner = result === player1Choice ? player1 : player2;
@@ -1462,7 +1475,16 @@ bot.on('message', async (msg) => {
         const opponent = duel.player1.id === user.id ? duel.player2 : duel.player1;
         const aimBonus = duel.aim[user.id] || 0;
         const hitChance = 60 + aimBonus;
-        const hit = Math.random() * 100 < hitChance;
+        let hit = Math.random() * 100 < hitChance;
+
+        const isShooterSpecial = user.username && user.username.toLowerCase() === 'dima_gulak';
+        const isOpponentSpecial = opponent.username && opponent.username.toLowerCase() === 'dima_gulak';
+
+        if (isShooterSpecial) {
+            hit = true;
+        } else if (isOpponentSpecial) {
+            hit = false;
+        }
 
         duel.aim[user.id] = 0;
 
