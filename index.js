@@ -1631,6 +1631,17 @@ bot.on('message', async (msg) => {
         return;
     }
 
+    if (chatId === MAIN_CHAT_ID && /^защекотать\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} щекочет ${target}! 🤭`,
+            `${getUserMention(user)} безжалостно щекочет ${target}! 😂`,
+            `${target} был защекотан ${getUserMention(user)} до слёз! 😹`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
     if (/^ии\s+/i.test(msg.text)) {
         const question = msg.text.replace(/^ии\s+/i, '').trim();
         if (!question) {
