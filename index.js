@@ -25,6 +25,8 @@ let players = [];
 let duelChallenges = new Map();
 let activeDuels = new Map();
 
+const MAIN_CHAT_ID = -1003740401552;
+
 function getDuelKey(chatId) {
     return String(chatId);
 }
@@ -1311,7 +1313,7 @@ bot.on('message', async (msg) => {
 
     updateMessageStats(chatId, user).catch(() => {});
 
-    if (text === 'монетка' || text === 'кто монетка') {
+    if (chatId === MAIN_CHAT_ID && (text === 'монетка' || text === 'кто монетка')) {
         bot.sendMessage(chatId, `🪙 ${getUserMention(user)} предлагает сыграть в монетку!\n\nНапишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey + '_coin', {
             challenger: user,
@@ -1320,7 +1322,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (/^монетка\s+@\w+/i.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /^монетка\s+@\w+/i.test(text)) {
         const targetUsername = text.match(/@(\w+)/)[1];
         bot.sendMessage(chatId, `🪙 ${getUserMention(user)} вызывает @${targetUsername} на монетку!\n\n@${targetUsername}, напишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey + '_coin', {
@@ -1331,7 +1333,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'орёл' || text === 'орел' || text === 'решка') {
+    if (chatId === MAIN_CHAT_ID && (text === 'орёл' || text === 'орел' || text === 'решка')) {
         const coinChallenge = duelChallenges.get(chatKey + '_coin');
         if (!coinChallenge) return;
         if (coinChallenge.challenger.id === user.id) {
@@ -1366,7 +1368,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'кто дуэль' || text === 'кто дуель') {
+    if (chatId === MAIN_CHAT_ID && (text === 'кто дуэль' || text === 'кто дуель')) {
         bot.sendMessage(chatId, `🔫 ${getUserMention(user)} ищет соперника для дуэли!\n\nНапишите "дуэль да" чтобы принять вызов.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey, {
             challenger: user,
@@ -1375,7 +1377,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (/^дуэль\s+@\w+/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /^дуэль\s+@\w+/.test(text)) {
         const targetUsername = text.match(/@(\w+)/)[1];
         bot.sendMessage(chatId, `🔫 ${getUserMention(user)} вызывает @${targetUsername} на дуэль!\n\n@${targetUsername}, напишите "дуэль да" чтобы принять или "дуэль нет" чтобы отклонить.`, { parse_mode: 'HTML' });
         duelChallenges.set(chatKey, {
@@ -1386,7 +1388,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'дуэль да' || text === 'дуель да') {
+    if (chatId === MAIN_CHAT_ID && (text === 'дуэль да' || text === 'дуель да')) {
         const challenge = duelChallenges.get(chatKey);
         if (!challenge) {
             bot.sendMessage(chatId, '❌ Нет активного вызова на дуэль.');
@@ -1416,7 +1418,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'дуэль нет' || text === 'дуель нет') {
+    if (chatId === MAIN_CHAT_ID && (text === 'дуэль нет' || text === 'дуель нет')) {
         const challenge = duelChallenges.get(chatKey);
         if (!challenge) {
             bot.sendMessage(chatId, '❌ Нет активного вызова на дуэль.');
@@ -1430,7 +1432,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'дуэль отмена' || text === 'дуель отмена') {
+    if (chatId === MAIN_CHAT_ID && (text === 'дуэль отмена' || text === 'дуель отмена')) {
         const challenge = duelChallenges.get(chatKey);
         if (challenge && challenge.challenger.id === user.id) {
             duelChallenges.delete(chatKey);
@@ -1447,7 +1449,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'выстрел') {
+    if (chatId === MAIN_CHAT_ID && text === 'выстрел') {
         const duel = activeDuels.get(chatKey);
         if (!duel) {
             return;
@@ -1486,7 +1488,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'прицелиться') {
+    if (chatId === MAIN_CHAT_ID && text === 'прицелиться') {
         const duel = activeDuels.get(chatKey);
         if (!duel) {
             return;
@@ -1504,7 +1506,7 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text === 'сбросить прицел') {
+    if (chatId === MAIN_CHAT_ID && text === 'сбросить прицел') {
         const duel = activeDuels.get(chatKey);
         if (!duel) {
             return;
@@ -1535,31 +1537,31 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (/скачки|скакать/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /скачки|скакать/.test(text)) {
         const phrase = RANDOM_PHRASES[Math.floor(Math.random() * RANDOM_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
 
-    if (/чай|кофе|чаю/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /чай|кофе|чаю/.test(text)) {
         const phrase = TEA_PHRASES[Math.floor(Math.random() * TEA_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
 
-    if (/есть|дайте|пожалуйста/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /есть|дайте|пожалуйста/.test(text)) {
         const phrase = GIVE_PHRASES[Math.floor(Math.random() * GIVE_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
 
-    if (/работаю|на работе|тружусь/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /работаю|на работе|тружусь/.test(text)) {
         const phrase = WORK_PHRASES[Math.floor(Math.random() * WORK_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
     }
 
-    if (/бот/.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /бот/.test(text)) {
         const phrase = BOT_PHRASES[Math.floor(Math.random() * BOT_PHRASES.length)];
         bot.sendMessage(msg.chat.id, phrase);
         return;
