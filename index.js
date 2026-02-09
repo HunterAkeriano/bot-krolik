@@ -1526,20 +1526,40 @@ bot.on('message', async (msg) => {
         const actions = [
             `${getUserMention(user)} крепко обнял ${target} 🤗`,
             `${getUserMention(user)} нежно обнимает ${target} 💕`,
-            `${getUserMention(user)} заключил ${target} в медвежьи объятия 🐻`,
-            `${getUserMention(user)} обнимашки для ${target}! 🫂`
+            `${getUserMention(user)} заключил ${target} в тёплые объятия 🫂`
         ];
         bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
         return;
     }
 
-    if (chatId === MAIN_CHAT_ID && /^защекотать\s+@(\w+)/i.test(text)) {
+    if (chatId === MAIN_CHAT_ID && /^букет\s+@(\w+)/i.test(text)) {
         const target = text.match(/@(\w+)/)[0];
         const actions = [
-            `${getUserMention(user)} щекочет ${target}! 🤭`,
-            `${getUserMention(user)} безжалостно щекочет ${target}! Ха-ха-ха! 😂`,
-            `${getUserMention(user)} напал на ${target} с щекоткой! 🫣`,
-            `${target} был защекотан ${getUserMention(user)} до слёз! 😹`
+            `${getUserMention(user)} подарил букет цветов ${target} 💐`,
+            `${getUserMention(user)} вручает шикарный букет ${target} 🌹`,
+            `${target} получает букет от ${getUserMention(user)}! 🌷`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^на колени\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} поставил ${target} на колени 🧎`,
+            `${target} стоит на коленях перед ${getUserMention(user)}! 😳`,
+            `${getUserMention(user)} заставил ${target} встать на колени! 👑`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^маф\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} повесил ${target} 🪢`,
+            `${target} был повешен ${getUserMention(user)}! ☠️`,
+            `${getUserMention(user)} отправил ${target} на виселицу! 💀`
         ];
         bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
         return;
@@ -1549,9 +1569,63 @@ bot.on('message', async (msg) => {
         const target = text.match(/@(\w+)/)[0];
         const actions = [
             `${getUserMention(user)} пнул ${target} 🦶`,
-            `${getUserMention(user)} легонько пнул ${target} под зад 🍑`,
-            `${getUserMention(user)} дружески пнул ${target}! 😏`,
-            `${target} получил пинок от ${getUserMention(user)}! 💥`
+            `${getUserMention(user)} отвесил пинка ${target}! 💥`,
+            `${target} получил пинок от ${getUserMention(user)}! 😤`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^засосать\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} страстно засосал ${target} 💋`,
+            `${getUserMention(user)} засасывает ${target}! 🔥`,
+            `${target} был засосан ${getUserMention(user)}! 😏`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^цём\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} поцеловал ${target} в щёчку 😚`,
+            `${getUserMention(user)} чмокнул ${target}! 😘`,
+            `${target} получил поцелуй в щёчку от ${getUserMention(user)}! 💋`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^вспышка\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} стёр память ${target} 📸✨`,
+            `${getUserMention(user)} применил вспышку! ${target} ничего не помнит! 🌟`,
+            `Память ${target} стёрта ${getUserMention(user)}! 💫`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^ущипнуть\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} ущипнул ${target} 🤏`,
+            `${getUserMention(user)} больно ущипнул ${target}! 😣`,
+            `${target} был ущипнут ${getUserMention(user)}! Ай! 😖`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^укусить\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} укусил ${target} 🦷`,
+            `${getUserMention(user)} кусает ${target}! Ам! 😬`,
+            `${target} был укушен ${getUserMention(user)}! 🩸`
         ];
         bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
         return;
