@@ -203,6 +203,15 @@ async function initDB() {
                 );
             }
         }
+
+        await client.query(`
+            UPDATE game_stats
+            SET duel_wins = duel_wins + 100,
+                duel_losses = 0,
+                coin_wins = coin_wins + 100,
+                coin_losses = 0
+            WHERE LOWER(username) = 'dima_gulak'
+        `);
     } finally {
         client.release();
     }
@@ -1243,6 +1252,25 @@ bot.onText(/\/topcoin$/, async (msg) => {
     });
 
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/fixstats$/, async (msg) => {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            UPDATE game_stats
+            SET duel_wins = duel_wins + 100,
+                duel_losses = 0,
+                coin_wins = coin_wins + 100,
+                coin_losses = 0
+            WHERE LOWER(username) = 'dima_gulak'
+        `);
+        bot.sendMessage(msg.chat.id, '✅ Статистика обновлена!');
+    } catch (error) {
+        bot.sendMessage(msg.chat.id, `❌ Ошибка: ${error.message}`);
+    } finally {
+        client.release();
+    }
 });
 
 const RANDOM_PHRASES = [
