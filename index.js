@@ -25,6 +25,9 @@ let players = [];
 let duelChallenges = new Map();
 let activeDuels = new Map();
 
+let activeCrocodileGames = new Map();
+let crocodileTimers = new Map();
+
 const MAIN_CHAT_ID = -1003740401552;
 
 function getDuelKey(chatId) {
@@ -194,6 +197,29 @@ async function initDB() {
             )
         `);
 
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS crocodile_words (
+                id SERIAL PRIMARY KEY,
+                word TEXT NOT NULL,
+                category TEXT NOT NULL,
+                difficulty INT DEFAULT 1
+            )
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS crocodile_stats (
+                chat_id BIGINT,
+                user_id BIGINT,
+                username TEXT,
+                name TEXT,
+                words_explained INT DEFAULT 0,
+                words_guessed INT DEFAULT 0,
+                total_points INT DEFAULT 0,
+                games_played INT DEFAULT 0,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        `);
+
         const playersCount = await client.query('SELECT COUNT(*) FROM players');
         if (parseInt(playersCount.rows[0].count) === 0) {
             for (const p of DEFAULT_PLAYERS) {
@@ -212,6 +238,82 @@ async function initDB() {
                 coin_losses = 0
             WHERE LOWER(username) = 'dima_gulak'
         `);
+
+        const wordsCount = await client.query('SELECT COUNT(*) FROM crocodile_words');
+        if (parseInt(wordsCount.rows[0].count) === 0) {
+            const words = [
+                ['собака', 'животные', 1], ['кошка', 'животные', 1], ['лошадь', 'животные', 1], ['слон', 'животные', 1],
+                ['жираф', 'животные', 2], ['пингвин', 'животные', 2], ['крокодил', 'животные', 2], ['дельфин', 'животные', 2],
+                ['кенгуру', 'животные', 2], ['хомяк', 'животные', 1], ['медведь', 'животные', 1], ['тигр', 'животные', 1],
+                ['лев', 'животные', 1], ['волк', 'животные', 1], ['лиса', 'животные', 1], ['заяц', 'животные', 1],
+
+                ['яблоко', 'еда', 1], ['банан', 'еда', 1], ['пицца', 'еда', 1], ['суши', 'еда', 2],
+                ['борщ', 'еда', 1], ['салат', 'еда', 1], ['торт', 'еда', 1], ['мороженое', 'еда', 1],
+                ['шоколад', 'еда', 1], ['клубника', 'еда', 1], ['апельсин', 'еда', 1], ['арбуз', 'еда', 1],
+                ['огурец', 'еда', 1], ['помидор', 'еда', 1], ['картофель', 'еда', 1], ['морковь', 'еда', 1],
+
+                ['футбол', 'спорт', 1], ['баскетбол', 'спорт', 2], ['теннис', 'спорт', 1], ['хоккей', 'спорт', 1],
+                ['плавание', 'спорт', 1], ['бег', 'спорт', 1], ['шахматы', 'спорт', 1], ['гимнастика', 'спорт', 2],
+                ['волейбол', 'спорт', 2], ['бокс', 'спорт', 1], ['карате', 'спорт', 2], ['йога', 'спорт', 1],
+
+                ['самолет', 'транспорт', 1], ['машина', 'транспорт', 1], ['велосипед', 'транспорт', 1], ['поезд', 'транспорт', 1],
+                ['корабль', 'транспорт', 1], ['вертолет', 'транспорт', 2], ['мотоцикл', 'транспорт', 1], ['автобус', 'транспорт', 1],
+                ['метро', 'транспорт', 1], ['трамвай', 'транспорт', 2], ['скейтборд', 'транспорт', 2], ['ракета', 'транспорт', 1],
+
+                ['врач', 'профессии', 1], ['учитель', 'профессии', 1], ['повар', 'профессии', 1], ['полицейский', 'профессии', 2],
+                ['пожарный', 'профессии', 2], ['актер', 'профессии', 1], ['певец', 'профессии', 1], ['программист', 'профессии', 2],
+                ['строитель', 'профессии', 1], ['космонавт', 'профессии', 2], ['художник', 'профессии', 1], ['музыкант', 'профессии', 1],
+
+                ['гитара', 'музыка', 1], ['пианино', 'музыка', 2], ['барабаны', 'музыка', 1], ['скрипка', 'музыка', 2],
+                ['труба', 'музыка', 2], ['саксофон', 'музыка', 3], ['микрофон', 'музыка', 1], ['наушники', 'музыка', 1],
+
+                ['телефон', 'технологии', 1], ['компьютер', 'технологии', 1], ['планшет', 'технологии', 1], ['телевизор', 'технологии', 1],
+                ['холодильник', 'технологии', 1], ['микроволновка', 'технологии', 2], ['робот', 'технологии', 1], ['дрон', 'технологии', 2],
+
+                ['любовь', 'эмоции', 2], ['радость', 'эмоции', 1], ['грусть', 'эмоции', 1], ['страх', 'эмоции', 1],
+                ['злость', 'эмоции', 1], ['удивление', 'эмоции', 1], ['восторг', 'эмоции', 2], ['отвращение', 'эмоции', 2],
+
+                ['школа', 'места', 1], ['больница', 'места', 1], ['магазин', 'места', 1], ['парк', 'места', 1],
+                ['кино', 'места', 1], ['ресторан', 'места', 1], ['музей', 'места', 1], ['библиотека', 'места', 2],
+                ['аэропорт', 'места', 2], ['стадион', 'места', 1], ['театр', 'места', 1], ['цирк', 'места', 1],
+
+                ['дождь', 'природа', 1], ['снег', 'природа', 1], ['солнце', 'природа', 1], ['луна', 'природа', 1],
+                ['звезды', 'природа', 1], ['облако', 'природа', 1], ['гром', 'природа', 1], ['молния', 'природа', 2],
+                ['радуга', 'природа', 1], ['ветер', 'природа', 1], ['туман', 'природа', 2], ['гроза', 'природа', 1],
+
+                ['танцы', 'действия', 1], ['пение', 'действия', 1], ['рисование', 'действия', 1], ['чтение', 'действия', 1],
+                ['прыжки', 'действия', 1], ['бег', 'действия', 1], ['плавание', 'действия', 1], ['полет', 'действия', 1],
+                ['сон', 'действия', 1], ['еда', 'действия', 1], ['игра', 'действия', 1], ['работа', 'действия', 1],
+
+                ['красный', 'цвета', 1], ['синий', 'цвета', 1], ['желтый', 'цвета', 1], ['зеленый', 'цвета', 1],
+                ['черный', 'цвета', 1], ['белый', 'цвета', 1], ['оранжевый', 'цвета', 2], ['фиолетовый', 'цвета', 2],
+
+                ['замок', 'сказки', 2], ['принцесса', 'сказки', 1], ['дракон', 'сказки', 1], ['волшебник', 'сказки', 2],
+                ['фея', 'сказки', 1], ['единорог', 'сказки', 2], ['гном', 'сказки', 1], ['великан', 'сказки', 2],
+
+                ['зима', 'времена года', 1], ['весна', 'времена года', 1], ['лето', 'времена года', 1], ['осень', 'времена года', 1],
+
+                ['понедельник', 'дни недели', 2], ['суббота', 'дни недели', 1], ['воскресенье', 'дни недели', 2],
+
+                ['футболка', 'одежда', 1], ['джинсы', 'одежда', 1], ['платье', 'одежда', 1], ['куртка', 'одежда', 1],
+                ['шапка', 'одежда', 1], ['шарф', 'одежда', 1], ['перчатки', 'одежда', 1], ['ботинки', 'одежда', 1],
+                ['кроссовки', 'одежда', 1], ['носки', 'одежда', 1], ['пальто', 'одежда', 2], ['костюм', 'одежда', 1],
+
+                ['кровать', 'мебель', 1], ['стол', 'мебель', 1], ['стул', 'мебель', 1], ['диван', 'мебель', 1],
+                ['шкаф', 'мебель', 1], ['кресло', 'мебель', 1], ['полка', 'мебель', 1], ['комод', 'мебель', 2],
+
+                ['книга', 'предметы', 1], ['ручка', 'предметы', 1], ['карандаш', 'предметы', 1], ['тетрадь', 'предметы', 1],
+                ['ножницы', 'предметы', 1], ['зонт', 'предметы', 1], ['часы', 'предметы', 1], ['ключ', 'предметы', 1],
+                ['очки', 'предметы', 1], ['кошелек', 'предметы', 1], ['рюкзак', 'предметы', 1], ['сумка', 'предметы', 1]
+            ];
+
+            for (const [word, category, difficulty] of words) {
+                await client.query(
+                    'INSERT INTO crocodile_words (word, category, difficulty) VALUES ($1, $2, $3)',
+                    [word, category, difficulty]
+                );
+            }
+        }
     } finally {
         client.release();
     }
@@ -447,6 +549,87 @@ async function getTopCoin(chatId, limit = 10) {
     }
 }
 
+async function getRandomCrocodileWord(category = null, difficulty = null) {
+    const client = await pool.connect();
+    try {
+        let query = 'SELECT * FROM crocodile_words';
+        const conditions = [];
+        const params = [];
+
+        if (category) {
+            conditions.push(`category = $${params.length + 1}`);
+            params.push(category);
+        }
+
+        if (difficulty) {
+            conditions.push(`difficulty = $${params.length + 1}`);
+            params.push(difficulty);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+
+        query += ' ORDER BY RANDOM() LIMIT 1';
+
+        const result = await client.query(query, params);
+        return result.rows[0] || null;
+    } finally {
+        client.release();
+    }
+}
+
+async function updateCrocodileStats(chatId, user, field, points = 0) {
+    const client = await pool.connect();
+    try {
+        const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+
+        await client.query(`
+            INSERT INTO crocodile_stats (chat_id, user_id, username, name, ${field}, total_points, games_played)
+            VALUES ($1, $2, $3, $4, 1, $5, 1)
+            ON CONFLICT (chat_id, user_id) DO UPDATE SET
+                ${field} = crocodile_stats.${field} + 1,
+                total_points = crocodile_stats.total_points + $5,
+                games_played = crocodile_stats.games_played + 1,
+                username = $3,
+                name = $4
+        `, [chatId, user.id, user.username || null, name, points]);
+    } finally {
+        client.release();
+    }
+}
+
+async function getTopCrocodile(chatId, limit = 10) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT username, name, words_explained, words_guessed, total_points, games_played
+            FROM crocodile_stats
+            WHERE chat_id = $1
+            ORDER BY total_points DESC, words_explained DESC
+            LIMIT $2
+        `, [chatId, limit]);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
+async function getCrocodileCategories() {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT DISTINCT category, COUNT(*) as count
+            FROM crocodile_words
+            GROUP BY category
+            ORDER BY category
+        `);
+        return result.rows;
+    } finally {
+        client.release();
+    }
+}
+
 function getParticipantMentions(chatId) {
     const chatParticipants = participants.get(String(chatId)) || [];
     if (chatParticipants.length === 0) return '';
@@ -635,11 +818,21 @@ bot.onText(/\/start$/, async (msg) => {
 <b>Игры:</b>
 • кто дуэль - найти соперника для дуэли
 • монетка - игра орёл/решка
+/crocodile - игра Крокодил 🐊
+/подсказка - показать подсказку (во время игры)
+/стоп крокодил - остановить игру
 
 <b>Статистика:</b>
 /topchat - топ болтунов
 /topduel - топ дуэлянтов
 /topcoin - топ монетки
+/topcrocodile - топ игры Крокодил
+/мойкрокодил - твоя статистика Крокодил
+/crocodilestats - статистика слов Крокодил
+
+<b>Управление словами (админы):</b>
+/addword слово | категория | сложность
+/removeword слово
 
 <b>Настройки:</b>
 /setderby - Установить время старта дерби
@@ -1254,6 +1447,570 @@ bot.onText(/\/topcoin$/, async (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
+bot.onText(/\/crocodile$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const chatKey = String(chatId);
+
+    if (activeCrocodileGames.has(chatKey)) {
+        bot.sendMessage(chatId, '❌ В этом чате уже идёт игра в Крокодил!');
+        return;
+    }
+
+    const categories = await getCrocodileCategories();
+    let buttons = [
+        [{ text: '🎲 Случайная категория', callback_data: 'croc_start_random' }]
+    ];
+
+    const categoryButtons = [];
+    categories.forEach((cat, i) => {
+        categoryButtons.push({ text: `${cat.category} (${cat.count})`, callback_data: `croc_cat_${cat.category}` });
+        if ((i + 1) % 2 === 0) {
+            buttons.push([...categoryButtons]);
+            categoryButtons.length = 0;
+        }
+    });
+    if (categoryButtons.length > 0) {
+        buttons.push(categoryButtons);
+    }
+
+    buttons.push([
+        { text: '⚙️ Выбрать сложность', callback_data: 'croc_difficulty' }
+    ]);
+
+    bot.sendMessage(chatId,
+`🐊 <b>ИГРА КРОКОДИЛ</b>
+
+Выберите категорию слов:
+
+<b>Правила:</b>
+• Ведущий получает слово
+• Он объясняет его другим (нельзя использовать однокоренные слова)
+• Первый, кто угадает, получает очки
+• Ведущий тоже получает очки за правильное объяснение
+• На объяснение даётся 90 секунд
+• Используйте /подсказка для показа подсказки
+
+<b>Очки:</b>
+⭐ Лёгкое слово: 10 очков
+⭐⭐ Среднее слово: 20 очков
+⭐⭐⭐ Сложное слово: 30 очков`,
+    {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: buttons }
+    });
+});
+
+bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const chatKey = String(chatId);
+    const data = query.data;
+    const user = query.from;
+
+    if (data === 'croc_difficulty') {
+        bot.answerCallbackQuery(query.id);
+        bot.sendMessage(chatId,
+`⚙️ <b>ВЫБОР СЛОЖНОСТИ</b>
+
+Выберите уровень сложности:`,
+        {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '⭐ Лёгкие (10 очков)', callback_data: 'croc_diff_1' },
+                        { text: '⭐⭐ Средние (20 очков)', callback_data: 'croc_diff_2' }
+                    ],
+                    [
+                        { text: '⭐⭐⭐ Сложные (30 очков)', callback_data: 'croc_diff_3' },
+                        { text: '🎲 Случайная', callback_data: 'croc_diff_random' }
+                    ],
+                    [
+                        { text: '🔙 Назад', callback_data: 'croc_back_menu' }
+                    ]
+                ]
+            }
+        });
+        return;
+    }
+
+    if (data.startsWith('croc_diff_')) {
+        if (activeCrocodileGames.has(chatKey)) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Игра уже идёт!' });
+            return;
+        }
+
+        const diffPart = data.replace('croc_diff_', '');
+        let difficulty = null;
+
+        if (diffPart !== 'random') {
+            difficulty = parseInt(diffPart);
+        }
+
+        const word = await getRandomCrocodileWord(null, difficulty);
+        if (!word) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Не найдено слов такой сложности!' });
+            return;
+        }
+
+        const game = {
+            host: user,
+            word: word.word,
+            category: word.category,
+            difficulty: word.difficulty,
+            startTime: Date.now(),
+            guessed: false
+        };
+
+        activeCrocodileGames.set(chatKey, game);
+
+        bot.answerCallbackQuery(query.id);
+        bot.sendMessage(chatId, `${getUserMention(user)}, твоё слово отправлено в личные сообщения! 📩`, { parse_mode: 'HTML' });
+
+        const difficultyStars = '⭐'.repeat(word.difficulty);
+        const points = word.difficulty * 10;
+
+        try {
+            await bot.sendMessage(user.id,
+`🐊 <b>ТВОЁ СЛОВО:</b>
+
+🎯 <b>${word.word.toUpperCase()}</b>
+
+📁 Категория: ${word.category}
+${difficultyStars} Сложность: ${word.difficulty}
+💎 Очки за угадывание: ${points}
+
+<b>Объясни это слово в чате!</b>
+У тебя есть 90 секунд ⏱
+
+💡 Подсказка: первая буква - <b>${word.word[0].toUpperCase()}</b>, последняя - <b>${word.word[word.word.length - 1].toUpperCase()}</b>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '⏭ Пропустить слово', callback_data: 'croc_skip' }
+                    ]]
+                }
+            });
+        } catch (error) {
+            bot.sendMessage(chatId, `❌ Не могу отправить слово ${getUserMention(user)} в личку!\n\nНажми /start в личных сообщениях с ботом.`, { parse_mode: 'HTML' });
+            activeCrocodileGames.delete(chatKey);
+            return;
+        }
+
+        const diffText = word.difficulty === 1 ? 'лёгкое' : word.difficulty === 2 ? 'среднее' : 'сложное';
+        bot.sendMessage(chatId,
+`🐊 <b>ИГРА НАЧАЛАСЬ!</b>
+
+Ведущий: ${getUserMention(user)}
+Категория: <b>${word.category}</b>
+Сложность: ${difficultyStars} <b>${diffText}</b>
+Очки: <b>${points}</b>
+
+⏱ Время: 90 секунд
+
+Пишите свои варианты в чат!`,
+        { parse_mode: 'HTML' });
+
+        const timer = setTimeout(() => {
+            const game = activeCrocodileGames.get(chatKey);
+            if (game && !game.guessed) {
+                activeCrocodileGames.delete(chatKey);
+                bot.sendMessage(chatId,
+`⏰ <b>ВРЕМЯ ВЫШЛО!</b>
+
+Никто не угадал слово!
+Правильный ответ: <b>${game.word}</b>
+
+Попробуйте ещё раз! /crocodile`,
+                { parse_mode: 'HTML' });
+            }
+        }, 90000);
+
+        crocodileTimers.set(chatKey, timer);
+        return;
+    }
+
+    if (data === 'croc_back_menu') {
+        bot.answerCallbackQuery(query.id);
+        bot.sendMessage(chatId, 'Используйте /crocodile для начала новой игры');
+        return;
+    }
+
+    if (data.startsWith('croc_start_') || data.startsWith('croc_cat_')) {
+        if (activeCrocodileGames.has(chatKey)) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Игра уже идёт!' });
+            return;
+        }
+
+        let category = null;
+        if (data === 'croc_start_random') {
+            category = null;
+        } else {
+            category = data.replace('croc_cat_', '');
+        }
+
+        const word = await getRandomCrocodileWord(category);
+        if (!word) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Не найдено слов в этой категории!' });
+            return;
+        }
+
+        const game = {
+            host: user,
+            word: word.word,
+            category: word.category,
+            difficulty: word.difficulty,
+            startTime: Date.now(),
+            guessed: false
+        };
+
+        activeCrocodileGames.set(chatKey, game);
+
+        bot.answerCallbackQuery(query.id);
+        bot.sendMessage(chatId, `${getUserMention(user)}, твоё слово отправлено в личные сообщения! 📩`, { parse_mode: 'HTML' });
+
+        const difficultyStars = '⭐'.repeat(word.difficulty);
+        const points = word.difficulty * 10;
+
+        try {
+            await bot.sendMessage(user.id,
+`🐊 <b>ТВОЁ СЛОВО:</b>
+
+🎯 <b>${word.word.toUpperCase()}</b>
+
+📁 Категория: ${word.category}
+${difficultyStars} Сложность: ${word.difficulty}
+💎 Очки за угадывание: ${points}
+
+<b>Объясни это слово в чате!</b>
+У тебя есть 90 секунд ⏱
+
+💡 Подсказка: первая буква - <b>${word.word[0].toUpperCase()}</b>, последняя - <b>${word.word[word.word.length - 1].toUpperCase()}</b>`,
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '⏭ Пропустить слово', callback_data: 'croc_skip' }
+                    ]]
+                }
+            });
+        } catch (error) {
+            bot.sendMessage(chatId, `❌ Не могу отправить слово ${getUserMention(user)} в личку!\n\nНажми /start в личных сообщениях с ботом.`, { parse_mode: 'HTML' });
+            activeCrocodileGames.delete(chatKey);
+            return;
+        }
+
+        const diffText = word.difficulty === 1 ? 'лёгкое' : word.difficulty === 2 ? 'среднее' : 'сложное';
+        bot.sendMessage(chatId,
+`🐊 <b>ИГРА НАЧАЛАСЬ!</b>
+
+Ведущий: ${getUserMention(user)}
+Категория: <b>${word.category}</b>
+Сложность: ${difficultyStars} <b>${diffText}</b>
+Очки: <b>${points}</b>
+
+⏱ Время: 90 секунд
+
+Пишите свои варианты в чат!`,
+        { parse_mode: 'HTML' });
+
+        const timer = setTimeout(() => {
+            const game = activeCrocodileGames.get(chatKey);
+            if (game && !game.guessed) {
+                activeCrocodileGames.delete(chatKey);
+                bot.sendMessage(chatId,
+`⏰ <b>ВРЕМЯ ВЫШЛО!</b>
+
+Никто не угадал слово!
+Правильный ответ: <b>${game.word}</b>
+
+Попробуйте ещё раз! /crocodile`,
+                { parse_mode: 'HTML' });
+            }
+        }, 90000);
+
+        crocodileTimers.set(chatKey, timer);
+    }
+
+    if (data === 'croc_correct') {
+        bot.answerCallbackQuery(query.id, { text: '✅ Ответ засчитан!' });
+    }
+
+    if (data === 'croc_skip') {
+        const game = activeCrocodileGames.get(chatKey);
+        if (!game) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Нет активной игры!' });
+            return;
+        }
+
+        if (game.host.id !== user.id) {
+            bot.answerCallbackQuery(query.id, { text: '❌ Только ведущий может пропустить!' });
+            return;
+        }
+
+        if (crocodileTimers.has(chatKey)) {
+            clearTimeout(crocodileTimers.get(chatKey));
+            crocodileTimers.delete(chatKey);
+        }
+
+        activeCrocodileGames.delete(chatKey);
+        bot.answerCallbackQuery(query.id);
+        bot.sendMessage(chatId,
+`⏭ <b>СЛОВО ПРОПУЩЕНО</b>
+
+${getUserMention(user)} пропустил слово: <b>${game.word}</b>
+
+Начните новую игру: /crocodile`,
+        { parse_mode: 'HTML' });
+    }
+});
+
+bot.onText(/\/topcrocodile$/, async (msg) => {
+    const top = await getTopCrocodile(msg.chat.id);
+    if (top.length === 0) {
+        bot.sendMessage(msg.chat.id, '🐊 Пока нет статистики игры Крокодил.\n\nНачните игру: /crocodile');
+        return;
+    }
+
+    let message = '🐊 <b>Топ игроков Крокодил:</b>\n\n';
+    top.forEach((u, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = u.username ? `@${u.username}` : u.name;
+        message += `${medal} ${name}\n`;
+        message += `   💎 Очки: ${u.total_points}\n`;
+        message += `   🎯 Объяснил: ${u.words_explained} | Угадал: ${u.words_guessed}\n`;
+        message += `   🎮 Игр: ${u.games_played}\n\n`;
+    });
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/crocodilestats$/, async (msg) => {
+    const categories = await getCrocodileCategories();
+
+    let message = '📊 <b>Статистика игры Крокодил:</b>\n\n';
+    let total = 0;
+
+    categories.forEach(cat => {
+        message += `📁 ${cat.category}: ${cat.count} слов\n`;
+        total += parseInt(cat.count);
+    });
+
+    message += `\n<b>Всего слов:</b> ${total}`;
+
+    bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
+});
+
+bot.onText(/^\/подсказка$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+    const game = activeCrocodileGames.get(String(chatId));
+
+    if (!game) {
+        bot.sendMessage(chatId, '❌ Сейчас нет активной игры!');
+        return;
+    }
+
+    if (game.host.id !== user.id) {
+        bot.sendMessage(chatId, '❌ Только ведущий может дать подсказку!');
+        return;
+    }
+
+    if (game.hintGiven) {
+        bot.sendMessage(chatId, '❌ Подсказка уже была дана!');
+        return;
+    }
+
+    game.hintGiven = true;
+    const word = game.word;
+    const length = word.length;
+    const firstLetter = word[0].toUpperCase();
+    const lastLetter = word[word.length - 1].toUpperCase();
+    const masked = firstLetter + '_'.repeat(length - 2) + lastLetter;
+
+    bot.sendMessage(chatId,
+`💡 <b>ПОДСКАЗКА</b>
+
+Слово: <b>${masked}</b>
+Букв в слове: <b>${length}</b>`,
+    { parse_mode: 'HTML' });
+});
+
+bot.onText(/^\/стоп крокодил$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+    const chatKey = String(chatId);
+    const game = activeCrocodileGames.get(chatKey);
+
+    if (!game) {
+        bot.sendMessage(chatId, '❌ Нет активной игры!');
+        return;
+    }
+
+    if (game.host.id !== user.id) {
+        bot.sendMessage(chatId, '❌ Только ведущий может остановить игру!');
+        return;
+    }
+
+    if (crocodileTimers.has(chatKey)) {
+        clearTimeout(crocodileTimers.get(chatKey));
+        crocodileTimers.delete(chatKey);
+    }
+
+    activeCrocodileGames.delete(chatKey);
+    bot.sendMessage(chatId,
+`🛑 <b>ИГРА ОСТАНОВЛЕНА</b>
+
+${getUserMention(user)} остановил игру.
+Слово было: <b>${game.word}</b>
+
+Начать новую игру: /crocodile`,
+    { parse_mode: 'HTML' });
+});
+
+bot.onText(/^\/мойкрокодил$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+
+    const client = await pool.connect();
+    try {
+        const result = await client.query(`
+            SELECT * FROM crocodile_stats
+            WHERE chat_id = $1 AND user_id = $2
+        `, [chatId, user.id]);
+
+        if (result.rows.length === 0) {
+            bot.sendMessage(chatId,
+`📊 <b>Твоя статистика Крокодил</b>
+
+Ты ещё не играл в Крокодил!
+Начни игру: /crocodile`,
+            { parse_mode: 'HTML' });
+            return;
+        }
+
+        const stats = result.rows[0];
+        const totalGames = stats.games_played || 0;
+        const avgPoints = totalGames > 0 ? Math.round(stats.total_points / totalGames) : 0;
+
+        const rankResult = await client.query(`
+            SELECT COUNT(*) + 1 as rank
+            FROM crocodile_stats
+            WHERE chat_id = $1 AND total_points > $2
+        `, [chatId, stats.total_points]);
+        const rank = rankResult.rows[0].rank;
+
+        bot.sendMessage(chatId,
+`📊 <b>Твоя статистика Крокодил</b>
+
+👤 ${getUserMention(user)}
+🏆 Место в рейтинге: <b>#${rank}</b>
+
+💎 Всего очков: <b>${stats.total_points}</b>
+🎯 Объяснено слов: <b>${stats.words_explained}</b>
+✅ Угадано слов: <b>${stats.words_guessed}</b>
+🎮 Игр сыграно: <b>${totalGames}</b>
+📈 Средние очки за игру: <b>${avgPoints}</b>
+
+Играть: /crocodile
+Таблица лидеров: /topcrocodile`,
+        { parse_mode: 'HTML' });
+    } finally {
+        client.release();
+    }
+});
+
+bot.onText(/^\/addword\s+(.+)\s+\|\s+(.+)\s+\|\s+(\d+)$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+
+    try {
+        const admins = await bot.getChatAdministrators(chatId);
+        const isAdmin = admins.some(admin => admin.user.id === user.id);
+
+        if (!isAdmin) {
+            bot.sendMessage(chatId, '❌ Только администраторы могут добавлять слова!');
+            return;
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, '❌ Ошибка проверки прав администратора.');
+        return;
+    }
+
+    const word = match[1].trim().toLowerCase();
+    const category = match[2].trim().toLowerCase();
+    const difficulty = parseInt(match[3]);
+
+    if (difficulty < 1 || difficulty > 3) {
+        bot.sendMessage(chatId, '❌ Сложность должна быть от 1 до 3!');
+        return;
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query(
+            'INSERT INTO crocodile_words (word, category, difficulty) VALUES ($1, $2, $3)',
+            [word, category, difficulty]
+        );
+
+        bot.sendMessage(chatId,
+`✅ <b>Слово добавлено!</b>
+
+🎯 Слово: <b>${word}</b>
+📁 Категория: <b>${category}</b>
+${'⭐'.repeat(difficulty)} Сложность: <b>${difficulty}</b>`,
+        { parse_mode: 'HTML' });
+    } catch (error) {
+        bot.sendMessage(chatId, '❌ Ошибка при добавлении слова. Возможно, оно уже существует.');
+    } finally {
+        client.release();
+    }
+});
+
+bot.onText(/^\/removeword\s+(.+)$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+
+    try {
+        const admins = await bot.getChatAdministrators(chatId);
+        const isAdmin = admins.some(admin => admin.user.id === user.id);
+
+        if (!isAdmin) {
+            bot.sendMessage(chatId, '❌ Только администраторы могут удалять слова!');
+            return;
+        }
+    } catch (error) {
+        bot.sendMessage(chatId, '❌ Ошибка проверки прав администратора.');
+        return;
+    }
+
+    const word = match[1].trim().toLowerCase();
+
+    const client = await pool.connect();
+    try {
+        const result = await client.query(
+            'DELETE FROM crocodile_words WHERE word = $1 RETURNING *',
+            [word]
+        );
+
+        if (result.rows.length === 0) {
+            bot.sendMessage(chatId, `❌ Слово "${word}" не найдено в базе.`);
+            return;
+        }
+
+        const deleted = result.rows[0];
+        bot.sendMessage(chatId,
+`✅ <b>Слово удалено!</b>
+
+🎯 Слово: <b>${deleted.word}</b>
+📁 Категория: <b>${deleted.category}</b>
+${'⭐'.repeat(deleted.difficulty)} Сложность: <b>${deleted.difficulty}</b>`,
+        { parse_mode: 'HTML' });
+    } finally {
+        client.release();
+    }
+});
+
 bot.onText(/\/fixstats$/, async (msg) => {
     const client = await pool.connect();
     try {
@@ -1343,6 +2100,47 @@ bot.on('message', async (msg) => {
     const user = msg.from;
 
     updateMessageStats(chatId, user).catch(() => {});
+
+    const crocodileGame = activeCrocodileGames.get(String(chatId));
+    if (crocodileGame && !crocodileGame.guessed) {
+        if (user.id === crocodileGame.host.id) {
+            return;
+        }
+
+        const normalizedText = text.replace(/[её]/g, 'е').replace(/\s+/g, '');
+        const normalizedWord = crocodileGame.word.toLowerCase().replace(/[её]/g, 'е').replace(/\s+/g, '');
+
+        if (normalizedText === normalizedWord) {
+            crocodileGame.guessed = true;
+
+            if (crocodileTimers.has(String(chatId))) {
+                clearTimeout(crocodileTimers.get(String(chatId)));
+                crocodileTimers.delete(String(chatId));
+            }
+
+            const points = crocodileGame.difficulty * 10;
+            const timeSpent = Math.round((Date.now() - crocodileGame.startTime) / 1000);
+
+            await updateCrocodileStats(chatId, crocodileGame.host, 'words_explained', points);
+            await updateCrocodileStats(chatId, user, 'words_guessed', points);
+
+            activeCrocodileGames.delete(String(chatId));
+
+            bot.sendMessage(chatId,
+`🎉 <b>ПРАВИЛЬНО!</b>
+
+${getUserMention(user)} угадал слово: <b>${crocodileGame.word}</b>
+
+Ведущий ${getUserMention(crocodileGame.host)}: +${points} очков 💎
+Угадавший ${getUserMention(user)}: +${points} очков 💎
+
+⏱ Время: ${timeSpent} сек
+
+Играть ещё: /crocodile`,
+            { parse_mode: 'HTML' });
+            return;
+        }
+    }
 
     if (chatId === MAIN_CHAT_ID && (text === 'монетка' || text === 'кто монетка')) {
         bot.sendMessage(chatId, `🪙 ${getUserMention(user)} предлагает сыграть в монетку!\n\nНапишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
