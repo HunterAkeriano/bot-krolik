@@ -27,8 +27,11 @@ let activeDuels = new Map();
 
 let activeCrocodileGames = new Map();
 let crocodileTimers = new Map();
+let usedCrocodileWords = new Map();
+let crocodileWordsLastUse = new Map();
 
 const MAIN_CHAT_ID = -1003740401552;
+const CROCODILE_WORDS_RESET_HOURS = 6;
 
 function getDuelKey(chatId) {
     return String(chatId);
@@ -549,9 +552,49 @@ async function getTopCoin(chatId, limit = 10) {
     }
 }
 
-async function getRandomCrocodileWord(category = null, difficulty = null) {
+async function getRandomCrocodileWord(chatId, category = null, difficulty = null) {
     const client = await pool.connect();
     try {
+        const chatKey = String(chatId);
+        let usedWords = usedCrocodileWords.get(chatKey) || [];
+
+        const now = Date.now();
+        const lastUse = crocodileWordsLastUse.get(chatKey) || 0;
+        const hoursSinceLastUse = (now - lastUse) / (1000 * 60 * 60);
+
+        if (hoursSinceLastUse >= CROCODILE_WORDS_RESET_HOURS) {
+            usedCrocodileWords.set(chatKey, []);
+            usedWords = [];
+        }
+
+        crocodileWordsLastUse.set(chatKey, now);
+
+        let countQuery = 'SELECT COUNT(*) FROM crocodile_words';
+        const countConditions = [];
+        const countParams = [];
+
+        if (category) {
+            countConditions.push(`category = $${countParams.length + 1}`);
+            countParams.push(category);
+        }
+
+        if (difficulty) {
+            countConditions.push(`difficulty = $${countParams.length + 1}`);
+            countParams.push(difficulty);
+        }
+
+        if (countConditions.length > 0) {
+            countQuery += ' WHERE ' + countConditions.join(' AND ');
+        }
+
+        const totalCount = await client.query(countQuery, countParams);
+        const total = parseInt(totalCount.rows[0].count);
+
+        if (usedWords.length >= total && total > 0) {
+            usedCrocodileWords.set(chatKey, []);
+            usedWords.length = 0;
+        }
+
         let query = 'SELECT * FROM crocodile_words';
         const conditions = [];
         const params = [];
@@ -566,14 +609,35 @@ async function getRandomCrocodileWord(category = null, difficulty = null) {
             params.push(difficulty);
         }
 
+        if (usedWords.length > 0) {
+            const placeholders = usedWords.map((_, i) => `$${params.length + i + 1}`).join(', ');
+            conditions.push(`id NOT IN (${placeholders})`);
+            params.push(...usedWords);
+        }
+
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
         }
 
-        query += ' ORDER BY RANDOM() LIMIT 1';
+        const randomCount = Math.min(10, total);
+        query += ` ORDER BY RANDOM() LIMIT ${randomCount}`;
 
         const result = await client.query(query, params);
-        return result.rows[0] || null;
+
+        if (result.rows.length === 0) {
+            return null;
+        }
+
+        const randomIndex = Math.floor(Math.random() * result.rows.length);
+        const selectedWord = result.rows[randomIndex];
+
+        usedWords.push(selectedWord.id);
+        if (usedWords.length > Math.max(10, Math.floor(total * 0.5))) {
+            usedWords.shift();
+        }
+        usedCrocodileWords.set(chatKey, usedWords);
+
+        return selectedWord;
     } finally {
         client.release();
     }
@@ -685,6 +749,20 @@ function scheduleBirthdayNotifications() {
                 broadcast(message, false);
             });
         }
+    });
+}
+
+function scheduleCrocodileWordsReset() {
+    const rule = new schedule.RecurrenceRule();
+    rule.hour = 4;
+    rule.minute = 0;
+    rule.tz = 'Europe/Kyiv';
+
+    schedule.scheduleJob(rule, () => {
+        const chatCount = usedCrocodileWords.size;
+        usedCrocodileWords.clear();
+        crocodileWordsLastUse.clear();
+        console.log(`🐊 Очищена история использованных слов Крокодил для ${chatCount} чатов`);
     });
 }
 
@@ -822,6 +900,7 @@ bot.onText(/\/start$/, async (msg) => {
 /crocodile - игра Крокодил 🐊
 /подсказка - показать подсказку (во время игры)
 /стоп крокодил - остановить игру
+/resetcrocodilewords - обновить список слов
 • рандом [от] [до] - случайное число из диапазона
 
 <b>Статистика:</b>
@@ -1552,7 +1631,7 @@ bot.on('callback_query', async (query) => {
             difficulty = parseInt(diffPart);
         }
 
-        const word = await getRandomCrocodileWord(null, difficulty);
+        const word = await getRandomCrocodileWord(chatId, null, difficulty);
         if (!word) {
             bot.answerCallbackQuery(query.id, { text: '❌ Не найдено слов такой сложности!' });
             return;
@@ -1655,7 +1734,7 @@ ${difficultyStars} Сложность: ${word.difficulty}
             category = data.replace('croc_cat_', '');
         }
 
-        const word = await getRandomCrocodileWord(category);
+        const word = await getRandomCrocodileWord(chatId, category);
         if (!word) {
             bot.answerCallbackQuery(query.id, { text: '❌ Не найдено слов в этой категории!' });
             return;
@@ -2076,6 +2155,15 @@ bot.onText(/^\/тестгороскоп$/i, async (msg) => {
     } catch (error) {
         bot.sendMessage(chatId, '❌ Ошибка генерации гороскопа!');
     }
+});
+
+bot.onText(/^\/resetcrocodilewords$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const chatKey = String(chatId);
+
+    usedCrocodileWords.delete(chatKey);
+    crocodileWordsLastUse.delete(chatKey);
+    bot.sendMessage(chatId, '✅ История использованных слов очищена! Теперь могут выпадать все слова заново.');
 });
 
 bot.onText(/\/fixstats$/, async (msg) => {
@@ -2793,6 +2881,7 @@ async function start() {
     scheduleDerbyResets();
     scheduleBirthdayNotifications();
     scheduleHoroscope();
+    scheduleCrocodileWordsReset();
     console.log('🐰 Hay Day Derby Bot запущен! (PostgreSQL)');
 }
 
