@@ -793,6 +793,7 @@ bot.onText(/\/start$/, async (msg) => {
 Добро пожаловать! Я буду уведомлять вас о:
 • Появлении кролика
 • Сбросах лимитов заданий
+• Ежедневный гороскоп в 8:00 по Киеву
 
 <b>Основные команды:</b>
 /status - Текущий статус
@@ -830,6 +831,10 @@ bot.onText(/\/start$/, async (msg) => {
 /topcrocodile - топ игры Крокодил
 /мойкрокодил - твоя статистика Крокодил
 /crocodilestats - статистика слов Крокодил
+
+<b>Гороскоп:</b>
+/гороскоп - получить гороскоп на сегодня
+Автоматическая отправка: каждый день в 8:00
 
 <b>Управление словами (админы):</b>
 /addword слово | категория | сложность
@@ -2012,6 +2017,67 @@ ${'⭐'.repeat(deleted.difficulty)} Сложность: <b>${deleted.difficulty}
     }
 });
 
+bot.onText(/^\/гороскоп$/i, async (msg) => {
+    const chatId = msg.chat.id;
+
+    if (chatId === MAIN_CHAT_ID) {
+        bot.sendMessage(chatId, '❌ Гороскопы не отправляются в этот чат!');
+        return;
+    }
+
+    bot.sendMessage(chatId, '🔮 Генерирую гороскоп на сегодня...');
+
+    await sendDailyHoroscope();
+});
+
+bot.onText(/^\/тестгороскоп$/i, async (msg) => {
+    const chatId = msg.chat.id;
+
+    if (chatId === MAIN_CHAT_ID) {
+        bot.sendMessage(chatId, '❌ Гороскопы не отправляются в этот чат!');
+        return;
+    }
+
+    const zodiacSigns = [
+        { name: 'Овен', emoji: '♈', dates: '21.03 - 19.04' },
+        { name: 'Телец', emoji: '♉', dates: '20.04 - 20.05' },
+        { name: 'Близнецы', emoji: '♊', dates: '21.05 - 20.06' },
+        { name: 'Рак', emoji: '♋', dates: '21.06 - 22.07' },
+        { name: 'Лев', emoji: '♌', dates: '23.07 - 22.08' },
+        { name: 'Дева', emoji: '♍', dates: '23.08 - 22.09' },
+        { name: 'Весы', emoji: '♎', dates: '23.09 - 22.10' },
+        { name: 'Скорпион', emoji: '♏', dates: '23.10 - 21.11' },
+        { name: 'Стрелец', emoji: '♐', dates: '22.11 - 21.12' },
+        { name: 'Козерог', emoji: '♑', dates: '22.12 - 19.01' },
+        { name: 'Водолей', emoji: '♒', dates: '20.01 - 18.02' },
+        { name: 'Рыбы', emoji: '♓', dates: '19.02 - 20.03' }
+    ];
+
+    const today = new Date().toLocaleDateString('ru-RU', {
+        timeZone: 'Europe/Kyiv',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+
+    bot.sendMessage(chatId, '🔮 Генерирую гороскоп...');
+
+    let message = `🌟 <b>ГОРОСКОП НА ${today.toUpperCase()}</b> 🌟\n\n`;
+
+    try {
+        for (const sign of zodiacSigns) {
+            const horoscope = await generateHoroscope(sign.name);
+            message += `${sign.emoji} <b>${sign.name}</b> (${sign.dates})\n${horoscope}\n\n`;
+        }
+
+        message += '✨ Пусть день будет удачным! ✨';
+
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+    } catch (error) {
+        bot.sendMessage(chatId, '❌ Ошибка генерации гороскопа!');
+    }
+});
+
 bot.onText(/\/fixstats$/, async (msg) => {
     const client = await pool.connect();
     try {
@@ -2089,6 +2155,78 @@ async function askAI(question) {
         max_tokens: 500
     });
     return response.choices[0].message.content;
+}
+
+async function generateHoroscope(sign) {
+    const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+            {
+                role: 'system',
+                content: 'Ты профессиональный астролог с многолетним опытом. Составляй краткие, но содержательные гороскопы на день. Пиши позитивно, мотивирующе, но реалистично. Используй красивый литературный русский язык. Гороскоп должен быть 3-4 предложения: общий прогноз дня, совет по работе/учебе, совет по личной жизни. Будь мудрым и вдохновляющим.'
+            },
+            {
+                role: 'user',
+                content: `Составь гороскоп на сегодня для знака зодиака ${sign}`
+            }
+        ],
+        max_tokens: 300
+    });
+    return response.choices[0].message.content;
+}
+
+async function sendDailyHoroscope() {
+    const zodiacSigns = [
+        { name: 'Овен', emoji: '♈', dates: '21.03 - 19.04' },
+        { name: 'Телец', emoji: '♉', dates: '20.04 - 20.05' },
+        { name: 'Близнецы', emoji: '♊', dates: '21.05 - 20.06' },
+        { name: 'Рак', emoji: '♋', dates: '21.06 - 22.07' },
+        { name: 'Лев', emoji: '♌', dates: '23.07 - 22.08' },
+        { name: 'Дева', emoji: '♍', dates: '23.08 - 22.09' },
+        { name: 'Весы', emoji: '♎', dates: '23.09 - 22.10' },
+        { name: 'Скорпион', emoji: '♏', dates: '23.10 - 21.11' },
+        { name: 'Стрелец', emoji: '♐', dates: '22.11 - 21.12' },
+        { name: 'Козерог', emoji: '♑', dates: '22.12 - 19.01' },
+        { name: 'Водолей', emoji: '♒', dates: '20.01 - 18.02' },
+        { name: 'Рыбы', emoji: '♓', dates: '19.02 - 20.03' }
+    ];
+
+    const today = new Date().toLocaleDateString('ru-RU', {
+        timeZone: 'Europe/Kyiv',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+
+    let message = `🌟 <b>ГОРОСКОП НА ${today.toUpperCase()}</b> 🌟\n\n`;
+
+    try {
+        for (const sign of zodiacSigns) {
+            const horoscope = await generateHoroscope(sign.name);
+            message += `${sign.emoji} <b>${sign.name}</b> (${sign.dates})\n${horoscope}\n\n`;
+        }
+
+        message += '✨ Пусть день будет удачным! ✨';
+
+        subscribers.forEach(chatId => {
+            if (chatId !== String(MAIN_CHAT_ID)) {
+                bot.sendMessage(chatId, message, { parse_mode: 'HTML' }).catch(() => {});
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка генерации гороскопа:', error);
+    }
+}
+
+function scheduleHoroscope() {
+    const rule = new schedule.RecurrenceRule();
+    rule.hour = 8;
+    rule.minute = 0;
+    rule.tz = 'Europe/Kyiv';
+
+    schedule.scheduleJob(rule, () => {
+        sendDailyHoroscope();
+    });
 }
 
 bot.on('message', async (msg) => {
@@ -2654,6 +2792,7 @@ async function start() {
     scheduleRabbitNotifications();
     scheduleDerbyResets();
     scheduleBirthdayNotifications();
+    scheduleHoroscope();
     console.log('🐰 Hay Day Derby Bot запущен! (PostgreSQL)');
 }
 
