@@ -2202,19 +2202,6 @@ bot.onText(/^\/resetcrocodilewords$/i, async (msg) => {
 bot.onText(/^\/updatecrocodiledb$/i, async (msg) => {
     const chatId = msg.chat.id;
 
-    try {
-        const admins = await bot.getChatAdministrators(chatId);
-        const isAdmin = admins.some(admin => admin.user.id === msg.from.id);
-
-        if (!isAdmin) {
-            bot.sendMessage(chatId, '❌ Только администраторы могут обновлять базу слов!');
-            return;
-        }
-    } catch (error) {
-        bot.sendMessage(chatId, '❌ Ошибка проверки прав администратора.');
-        return;
-    }
-
     const client = await pool.connect();
     try {
         bot.sendMessage(chatId, '🔄 Начинаю обновление базы слов...');
