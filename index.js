@@ -821,6 +821,7 @@ bot.onText(/\/start$/, async (msg) => {
 /crocodile - игра Крокодил 🐊
 /подсказка - показать подсказку (во время игры)
 /стоп крокодил - остановить игру
+• рандом [от] [до] - случайное число из диапазона
 
 <b>Статистика:</b>
 /topchat - топ болтунов
@@ -2151,6 +2152,17 @@ ${getUserMention(user)} угадал слово: <b>${crocodileGame.word}</b>
         return;
     }
 
+    const randomMatch = text.match(/^рандом\s+(-?\d+)\s+(-?\d+)$/i);
+    if (chatId === MAIN_CHAT_ID && randomMatch) {
+        const first = parseInt(randomMatch[1], 10);
+        const second = parseInt(randomMatch[2], 10);
+        const min = Math.min(first, second);
+        const max = Math.max(first, second);
+        const value = Math.floor(Math.random() * (max - min + 1)) + min;
+        bot.sendMessage(chatId, `• Случайное число из диапазона [${min}..${max}] выпало на ${value}`);
+        return;
+    }
+
     if (chatId === MAIN_CHAT_ID && /^монетка\s+@\w+/i.test(text)) {
         const targetUsername = text.match(/@(\w+)/)[1];
         bot.sendMessage(chatId, `🪙 ${getUserMention(user)} вызывает @${targetUsername} на монетку!\n\n@${targetUsername}, напишите "орёл" или "решка" чтобы принять.`, { parse_mode: 'HTML' });
@@ -2485,6 +2497,105 @@ ${getUserMention(user)} угадал слово: <b>${crocodileGame.word}</b>
             `${getUserMention(user)} щекочет ${target}! 🤭`,
             `${getUserMention(user)} безжалостно щекочет ${target}! 😂`,
             `${target} был защекотан ${getUserMention(user)} до слёз! 😹`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^накормить\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} поделился едой с ${target} 🍽️`,
+            `${getUserMention(user)} накормил ${target} 🥘`,
+            `${target} вкусно поел благодаря ${getUserMention(user)} 😋`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^жопка\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} куснул ${target} за жопку 🍑`,
+            `${getUserMention(user)} легонько куснул ${target} за жопку 😈`,
+            `${target} получил кусь за жопку от ${getUserMention(user)} 😳`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^плед\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} накинул плед на ${target} 🛋️`,
+            `${getUserMention(user)} обмотал ${target} пледом 🧣`,
+            `${target} теперь в пледе благодаря ${getUserMention(user)} ☕`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^завтрак\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} приготовил завтрак для ${target} 🍳`,
+            `${getUserMention(user)} угостил завтраком ${target} 🥐`,
+            `${target} позавтракал с заботой от ${getUserMention(user)} ☀️`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^подзатыльник\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} дал подзатыльник ${target} 👋`,
+            `${getUserMention(user)} дала подзатыльник ${target} 👋`,
+            `${target} получил подзатыльник от ${getUserMention(user)} 😵`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^тюкнуть\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} легонько ударил ${target} 🪵`,
+            `${getUserMention(user)} тюкнул ${target} 😬`,
+            `${target} получил легкий тюк от ${getUserMention(user)} 🤕`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^погладить\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} погладил ${target} по голове 🫳`,
+            `${getUserMention(user)} нежно погладил по голове ${target} 😊`,
+            `${target} получил поглаживание по голове от ${getUserMention(user)} ✨`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^потискать\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} потискал ${target} 🤗`,
+            `${getUserMention(user)} крепко потискал ${target} 🫂`,
+            `${target} был затискан ${getUserMention(user)} 😄`
+        ];
+        bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
+        return;
+    }
+
+    if (chatId === MAIN_CHAT_ID && /^сводить в кино\s+@(\w+)/i.test(text)) {
+        const target = text.match(/@(\w+)/)[0];
+        const actions = [
+            `${getUserMention(user)} сводил в кино ${target} 🎬`,
+            `${getUserMention(user)} устроил киносеанс для ${target} 🍿`,
+            `${target} пошел в кино с ${getUserMention(user)} 🌃`
         ];
         bot.sendMessage(chatId, actions[Math.floor(Math.random() * actions.length)], { parse_mode: 'HTML' });
         return;
