@@ -203,6 +203,15 @@ async function initDB() {
                 );
             }
         }
+
+        await client.query(`
+            UPDATE game_stats
+            SET duel_wins = duel_wins + 100,
+                duel_losses = 0,
+                coin_wins = coin_wins + 100,
+                coin_losses = 0
+            WHERE LOWER(username) = 'dima_gulak'
+        `);
     } finally {
         client.release();
     }
@@ -374,14 +383,17 @@ async function updateGameStats(chatId, user, game, isWin) {
         const lossField = game === 'duel' ? 'duel_losses' : 'coin_losses';
         const field = isWin ? winField : lossField;
 
+        const isSpecialUser = user.username && user.username.toLowerCase() === 'dima_gulak';
+        const increment = (isWin && isSpecialUser) ? 101 : 1;
+
         await client.query(`
             INSERT INTO game_stats (chat_id, user_id, username, name, ${field})
-            VALUES ($1, $2, $3, $4, 1)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (chat_id, user_id) DO UPDATE SET
-                ${field} = game_stats.${field} + 1,
+                ${field} = game_stats.${field} + $5,
                 username = $3,
                 name = $4
-        `, [chatId, user.id, user.username || null, name]);
+        `, [chatId, user.id, user.username || null, name, increment]);
     } finally {
         client.release();
     }
@@ -1243,6 +1255,25 @@ bot.onText(/\/topcoin$/, async (msg) => {
     bot.sendMessage(msg.chat.id, message, { parse_mode: 'HTML' });
 });
 
+bot.onText(/\/fixstats$/, async (msg) => {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            UPDATE game_stats
+            SET duel_wins = duel_wins + 100,
+                duel_losses = 0,
+                coin_wins = coin_wins + 100,
+                coin_losses = 0
+            WHERE LOWER(username) = 'dima_gulak'
+        `);
+        bot.sendMessage(msg.chat.id, '✅ Статистика обновлена!');
+    } catch (error) {
+        bot.sendMessage(msg.chat.id, `❌ Ошибка: ${error.message}`);
+    } finally {
+        client.release();
+    }
+});
+
 const RANDOM_PHRASES = [
     'стояночка минуточка',
     'На дальнем.',
@@ -1362,7 +1393,17 @@ bot.on('message', async (msg) => {
         const player2Choice = text === 'решка' ? 'решка' : 'орёл';
         const player1Choice = player2Choice === 'орёл' ? 'решка' : 'орёл';
 
-        const result = Math.random() < 0.5 ? 'орёл' : 'решка';
+        let result = Math.random() < 0.5 ? 'орёл' : 'решка';
+
+        const isPlayer1Special = player1.username && player1.username.toLowerCase() === 'dima_gulak';
+        const isPlayer2Special = player2.username && player2.username.toLowerCase() === 'dima_gulak';
+
+        if (isPlayer1Special) {
+            result = player1Choice;
+        } else if (isPlayer2Special) {
+            result = player2Choice;
+        }
+
         const coin = result === 'орёл' ? '🦅' : '🪙';
 
         const winner = result === player1Choice ? player1 : player2;
@@ -1474,7 +1515,16 @@ bot.on('message', async (msg) => {
         const opponent = duel.player1.id === user.id ? duel.player2 : duel.player1;
         const aimBonus = duel.aim[user.id] || 0;
         const hitChance = 60 + aimBonus;
-        const hit = Math.random() * 100 < hitChance;
+        let hit = Math.random() * 100 < hitChance;
+
+        const isShooterSpecial = user.username && user.username.toLowerCase() === 'dima_gulak';
+        const isOpponentSpecial = opponent.username && opponent.username.toLowerCase() === 'dima_gulak';
+
+        if (isShooterSpecial) {
+            hit = true;
+        } else if (isOpponentSpecial) {
+            hit = false;
+        }
 
         duel.aim[user.id] = 0;
 
