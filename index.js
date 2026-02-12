@@ -2132,11 +2132,6 @@ ${'⭐'.repeat(deleted.difficulty)} Сложность: <b>${deleted.difficulty}
 bot.onText(/^\/гороскоп$/i, async (msg) => {
     const chatId = msg.chat.id;
 
-    if (chatId === MAIN_CHAT_ID) {
-        bot.sendMessage(chatId, '❌ Гороскопы не отправляются в этот чат!');
-        return;
-    }
-
     bot.sendMessage(chatId, '🔮 Генерирую гороскоп на сегодня...');
 
     await sendDailyHoroscope();
@@ -2144,11 +2139,6 @@ bot.onText(/^\/гороскоп$/i, async (msg) => {
 
 bot.onText(/^\/тестгороскоп$/i, async (msg) => {
     const chatId = msg.chat.id;
-
-    if (chatId === MAIN_CHAT_ID) {
-        bot.sendMessage(chatId, '❌ Гороскопы не отправляются в этот чат!');
-        return;
-    }
 
     const zodiacSigns = [
         { name: 'Овен', emoji: '♈', dates: '21.03 - 19.04' },
@@ -2457,9 +2447,7 @@ async function sendDailyHoroscope() {
         message += '✨ Пусть день будет удачным! ✨';
 
         subscribers.forEach(chatId => {
-            if (chatId !== String(MAIN_CHAT_ID)) {
-                bot.sendMessage(chatId, message, { parse_mode: 'HTML' }).catch(() => {});
-            }
+            bot.sendMessage(chatId, message, { parse_mode: 'HTML' }).catch(() => {});
         });
     } catch (error) {
         console.error('Ошибка генерации гороскопа:', error);
