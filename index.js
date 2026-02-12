@@ -2131,6 +2131,7 @@ ${'⭐'.repeat(deleted.difficulty)} Сложность: <b>${deleted.difficulty}
 
 bot.onText(/^\/гороскоп$/i, async (msg) => {
     const chatId = msg.chat.id;
+    console.log('[КОМАНДА] /гороскоп вызвана в чате:', chatId);
 
     bot.sendMessage(chatId, '🔮 Генерирую гороскоп на сегодня...');
 
@@ -2414,6 +2415,8 @@ async function generateHoroscope(sign) {
 }
 
 async function sendDailyHoroscope(targetChatId = null) {
+    console.log('[ГОРОСКОП] Начало генерации гороскопа, targetChatId:', targetChatId);
+
     const zodiacSigns = [
         { name: 'Овен', emoji: '♈', dates: '21.03 - 19.04' },
         { name: 'Телец', emoji: '♉', dates: '20.04 - 20.05' },
@@ -2440,21 +2443,31 @@ async function sendDailyHoroscope(targetChatId = null) {
 
     try {
         for (const sign of zodiacSigns) {
+            console.log(`[ГОРОСКОП] Генерация для знака: ${sign.name}`);
             const horoscope = await generateHoroscope(sign.name);
             message += `${sign.emoji} <b>${sign.name}</b> (${sign.dates})\n${horoscope}\n\n`;
         }
 
         message += '✨ Пусть день будет удачным! ✨';
+        console.log('[ГОРОСКОП] Генерация завершена, начало отправки');
 
         if (targetChatId) {
-            bot.sendMessage(targetChatId, message, { parse_mode: 'HTML' }).catch(() => {});
+            console.log('[ГОРОСКОП] Отправка в чат:', targetChatId);
+            bot.sendMessage(targetChatId, message, { parse_mode: 'HTML' })
+                .then(() => console.log('[ГОРОСКОП] Успешно отправлено в чат:', targetChatId))
+                .catch((err) => console.error('[ГОРОСКОП] Ошибка отправки в чат:', targetChatId, err.message));
         } else {
+            console.log('[ГОРОСКОП] Отправка всем подписчикам, количество:', subscribers.size);
             subscribers.forEach(chatId => {
-                bot.sendMessage(chatId, message, { parse_mode: 'HTML' }).catch(() => {});
+                console.log('[ГОРОСКОП] Отправка подписчику:', chatId);
+                bot.sendMessage(chatId, message, { parse_mode: 'HTML' })
+                    .then(() => console.log('[ГОРОСКОП] Успешно отправлено подписчику:', chatId))
+                    .catch((err) => console.error('[ГОРОСКОП] Ошибка отправки подписчику:', chatId, err.message));
             });
         }
+        console.log('[ГОРОСКОП] Отправка завершена');
     } catch (error) {
-        console.error('Ошибка генерации гороскопа:', error);
+        console.error('[ГОРОСКОП] Ошибка генерации гороскопа:', error);
     }
 }
 
@@ -2465,8 +2478,10 @@ function scheduleHoroscope() {
     rule.tz = 'Europe/Kyiv';
 
     schedule.scheduleJob(rule, () => {
+        console.log('[ГОРОСКОП] Запуск по расписанию в 8:00');
         sendDailyHoroscope();
     });
+    console.log('[ГОРОСКОП] Расписание установлено на 8:00 по Киеву');
 }
 
 bot.on('message', async (msg) => {
