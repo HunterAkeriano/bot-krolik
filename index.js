@@ -2402,14 +2402,14 @@ async function generateHoroscope(sign) {
         messages: [
             {
                 role: 'system',
-                content: 'Ты профессиональный астролог с многолетним опытом. Составляй краткие, но содержательные гороскопы на день. Пиши позитивно, мотивирующе, но реалистично. Используй красивый литературный русский язык. Гороскоп должен быть 3-4 предложения: общий прогноз дня, совет по работе/учебе, совет по личной жизни. Будь мудрым и вдохновляющим.'
+                content: 'Ты профессиональный астролог. Составляй краткие гороскопы на день. Пиши позитивно и мотивирующе. Гороскоп должен быть СТРОГО 2-3 коротких предложения, максимум 250 символов. Будь лаконичным.'
             },
             {
                 role: 'user',
                 content: `Составь гороскоп на сегодня для знака зодиака ${sign}`
             }
         ],
-        max_tokens: 300
+        max_tokens: 100
     });
     return response.choices[0].message.content;
 }
@@ -2449,21 +2449,25 @@ async function sendDailyHoroscope(targetChatId = null) {
         }
 
         message += '✨ Пусть день будет удачным! ✨';
-        console.log('[ГОРОСКОП] Генерация завершена, начало отправки');
+
+        console.log('[ГОРОСКОП] Генерация завершена, длина сообщения:', message.length, 'символов');
+        console.log('[ГОРОСКОП] Начало отправки');
 
         if (targetChatId) {
             console.log('[ГОРОСКОП] Отправка в чат:', targetChatId);
-            bot.sendMessage(targetChatId, message, { parse_mode: 'HTML' })
-                .then(() => console.log('[ГОРОСКОП] Успешно отправлено в чат:', targetChatId))
-                .catch((err) => console.error('[ГОРОСКОП] Ошибка отправки в чат:', targetChatId, err.message));
+            await bot.sendMessage(targetChatId, message, { parse_mode: 'HTML' });
+            console.log('[ГОРОСКОП] Успешно отправлено в чат:', targetChatId);
         } else {
             console.log('[ГОРОСКОП] Отправка всем подписчикам, количество:', subscribers.size);
-            subscribers.forEach(chatId => {
+            for (const chatId of subscribers) {
                 console.log('[ГОРОСКОП] Отправка подписчику:', chatId);
-                bot.sendMessage(chatId, message, { parse_mode: 'HTML' })
-                    .then(() => console.log('[ГОРОСКОП] Успешно отправлено подписчику:', chatId))
-                    .catch((err) => console.error('[ГОРОСКОП] Ошибка отправки подписчику:', chatId, err.message));
-            });
+                try {
+                    await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+                    console.log('[ГОРОСКОП] Успешно отправлено подписчику:', chatId);
+                } catch (err) {
+                    console.error('[ГОРОСКОП] Ошибка отправки подписчику:', chatId, err.message);
+                }
+            }
         }
         console.log('[ГОРОСКОП] Отправка завершена');
     } catch (error) {
