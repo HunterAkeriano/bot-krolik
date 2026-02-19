@@ -174,7 +174,11 @@ async function unrestrictUser(chatId, userId) {
             use_independent_chat_permissions: false
         })
     });
-    return response.json();
+    const data = await response.json();
+    if (!data.ok) {
+        throw new Error(data.description || `Не удалось размутить в чате ${chatId}`);
+    }
+    return data;
 }
 
 async function restrictUser(chatId, userId, untilDate = 0) {
@@ -203,7 +207,11 @@ async function restrictUser(chatId, userId, untilDate = 0) {
             use_independent_chat_permissions: false
         })
     });
-    return response.json();
+    const data = await response.json();
+    if (!data.ok) {
+        throw new Error(data.description || `Не удалось выдать мут в чате ${chatId}`);
+    }
+    return data;
 }
 
 const DEFAULT_PLAYERS = [
@@ -1215,6 +1223,11 @@ bot.onText(/^-мут-педика-русни:\s*(.*)$/i, async (msg, match) => {
         return;
     }
 
+    if (msg.chat.type === 'channel') {
+        bot.sendMessage(chatId, '❌ В канале Telegram мут не работает. Мутить можно только в группе/супергруппе (обычно это чат обсуждения канала).');
+        return;
+    }
+
     if (!input) {
         if (msg.reply_to_message) {
             targetUserId = msg.reply_to_message.from.id;
@@ -1243,28 +1256,30 @@ bot.onText(/^-мут-педика-русни:\s*(.*)$/i, async (msg, match) => {
 
     let ok = 0;
     let failed = 0;
+    const failDetails = [];
 
     for (const targetChatId of chatIds) {
         try {
-            const result = await restrictUser(targetChatId, targetUserId, 0);
-            if (result && result.ok) {
-                ok++;
-            } else {
-                failed++;
-            }
-        } catch {
+            await restrictUser(targetChatId, targetUserId, 0);
+            ok++;
+        } catch (error) {
             failed++;
+            if (failDetails.length < 5) {
+                failDetails.push(`${targetChatId}: ${error.message || error}`);
+            }
         }
     }
 
     if (ok === 0) {
-        bot.sendMessage(chatId, `❌ Не удалось выдать мут для ${targetLabel || targetUserId}.`);
+        const details = failDetails.length ? `\n\nПричины:\n${failDetails.join('\n')}` : '';
+        bot.sendMessage(chatId, `❌ Не удалось выдать мут для ${targetLabel || targetUserId}.${details}`);
         return;
     }
 
+    const details = failDetails.length ? `\n\nОшибки:\n${failDetails.join('\n')}` : '';
     bot.sendMessage(
         chatId,
-        `🔇 ${targetLabel || targetUserId} замучен в чатах: ${ok}. Ошибок: ${failed}.`,
+        `🔇 ${targetLabel || targetUserId} замучен в чатах: ${ok}. Ошибок: ${failed}.${details}`,
         { parse_mode: 'HTML' }
     );
 });
