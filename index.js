@@ -76,6 +76,34 @@ async function findUserIdByUsername(chatId, username) {
     return null;
 }
 
+async function findUserIdByUsernameGlobal(username) {
+    const normalized = normalizeUsername(username);
+
+    for (const [, chatParticipants] of participants) {
+        const localMatch = chatParticipants.find(p => p.username && p.username.toLowerCase() === normalized);
+        if (localMatch) return localMatch.id;
+    }
+
+    const client = await pool.connect();
+    try {
+        let result = await client.query(
+            'SELECT user_id FROM participants WHERE LOWER(username) = $1 ORDER BY chat_id DESC LIMIT 1',
+            [normalized]
+        );
+        if (result.rows.length > 0) return result.rows[0].user_id;
+
+        result = await client.query(
+            'SELECT user_id FROM message_stats WHERE LOWER(username) = $1 ORDER BY chat_id DESC LIMIT 1',
+            [normalized]
+        );
+        if (result.rows.length > 0) return result.rows[0].user_id;
+    } finally {
+        client.release();
+    }
+
+    return null;
+}
+
 async function getKnownUserIds(chatId) {
     const ids = new Set();
     const chatParticipants = participants.get(String(chatId)) || [];
@@ -88,6 +116,29 @@ async function getKnownUserIds(chatId) {
 
         const mRows = await client.query('SELECT user_id FROM message_stats WHERE chat_id = $1', [chatId]);
         mRows.rows.forEach(r => ids.add(r.user_id));
+    } finally {
+        client.release();
+    }
+
+    return [...ids];
+}
+
+async function getKnownChatIdsForUser(userId) {
+    const ids = new Set();
+
+    for (const [chatId, chatParticipants] of participants) {
+        if (chatParticipants.some(p => String(p.id) === String(userId))) {
+            ids.add(chatId);
+        }
+    }
+
+    const client = await pool.connect();
+    try {
+        const pRows = await client.query('SELECT DISTINCT chat_id FROM participants WHERE user_id = $1', [userId]);
+        pRows.rows.forEach(r => ids.add(String(r.chat_id)));
+
+        const mRows = await client.query('SELECT DISTINCT chat_id FROM message_stats WHERE user_id = $1', [userId]);
+        mRows.rows.forEach(r => ids.add(String(r.chat_id)));
     } finally {
         client.release();
     }
@@ -120,6 +171,35 @@ async function unrestrictUser(chatId, userId) {
             chat_id: chatId,
             user_id: userId,
             permissions: permissions,
+            use_independent_chat_permissions: false
+        })
+    });
+    return response.json();
+}
+
+async function restrictUser(chatId, userId, untilDate = 0) {
+    const permissions = {
+        can_send_messages: false,
+        can_send_audios: false,
+        can_send_documents: false,
+        can_send_photos: false,
+        can_send_videos: false,
+        can_send_video_notes: false,
+        can_send_voice_notes: false,
+        can_send_polls: false,
+        can_send_other_messages: false,
+        can_add_web_page_previews: false
+    };
+
+    const url = `https://api.telegram.org/bot${TOKEN}/restrictChatMember`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: chatId,
+            user_id: userId,
+            permissions: permissions,
+            until_date: untilDate,
             use_independent_chat_permissions: false
         })
     });
@@ -1114,6 +1194,79 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
     } catch (error) {
         bot.sendMessage(chatId, `❌ Ошибка размута: ${error.message || error}`);
     }
+});
+
+bot.onText(/^-мут-педика-русни:\s*(.*)$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+    const input = (match[1] || '').trim();
+    let targetUserId = null;
+    let targetLabel = null;
+
+    try {
+        const admins = await bot.getChatAdministrators(chatId);
+        const isAdmin = admins.some(admin => admin.user.id === user.id);
+        if (!isAdmin) {
+            bot.sendMessage(chatId, '❌ Только администраторы могут использовать эту команду.');
+            return;
+        }
+    } catch {
+        bot.sendMessage(chatId, '❌ Ошибка проверки прав администратора.');
+        return;
+    }
+
+    if (!input) {
+        if (msg.reply_to_message) {
+            targetUserId = msg.reply_to_message.from.id;
+            targetLabel = getUserMention(msg.reply_to_message.from);
+        } else {
+            bot.sendMessage(chatId, '❌ Укажи ник: -мут-педика-русни: @username');
+            return;
+        }
+    } else {
+        const username = input.split(/\s+/)[0];
+        if (!username.startsWith('@')) {
+            bot.sendMessage(chatId, '❌ Укажи ник в формате @username');
+            return;
+        }
+
+        targetUserId = await findUserIdByUsernameGlobal(username);
+        if (!targetUserId) {
+            bot.sendMessage(chatId, `❌ Не могу найти ${username}. Пусть он напишет в один из чатов с ботом.`);
+            return;
+        }
+        targetLabel = username;
+    }
+
+    const chatIds = new Set(await getKnownChatIdsForUser(targetUserId));
+    chatIds.add(String(chatId));
+
+    let ok = 0;
+    let failed = 0;
+
+    for (const targetChatId of chatIds) {
+        try {
+            const result = await restrictUser(targetChatId, targetUserId, 0);
+            if (result && result.ok) {
+                ok++;
+            } else {
+                failed++;
+            }
+        } catch {
+            failed++;
+        }
+    }
+
+    if (ok === 0) {
+        bot.sendMessage(chatId, `❌ Не удалось выдать мут для ${targetLabel || targetUserId}.`);
+        return;
+    }
+
+    bot.sendMessage(
+        chatId,
+        `🔇 ${targetLabel || targetUserId} замучен в чатах: ${ok}. Ошибок: ${failed}.`,
+        { parse_mode: 'HTML' }
+    );
 });
 
 bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
