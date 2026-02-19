@@ -1276,6 +1276,73 @@ bot.onText(/^-мут-педика-русни:\s*(.*)$/i, async (msg, match) => {
     );
 });
 
+bot.onText(/^кик-русня:\s*(.*)$/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const username = msg.from?.username;
+    const input = (match[1] || '').trim();
+    let targetUserId = null;
+    let targetLabel = null;
+
+    if (username !== 'dima_gulak') {
+        return;
+    }
+
+    if (!input) {
+        if (msg.reply_to_message) {
+            targetUserId = msg.reply_to_message.from.id;
+            targetLabel = getUserMention(msg.reply_to_message.from);
+        } else {
+            bot.sendMessage(chatId, '❌ Укажи ник: кик-русня: @username');
+            return;
+        }
+    } else {
+        const username = input.split(/\s+/)[0];
+        if (!username.startsWith('@')) {
+            bot.sendMessage(chatId, '❌ Укажи ник в формате @username');
+            return;
+        }
+
+        targetUserId = await findUserIdByUsernameGlobal(username);
+        if (!targetUserId) {
+            bot.sendMessage(chatId, `❌ Не могу найти ${username}. Пусть он напишет в один из чатов с ботом.`);
+            return;
+        }
+        targetLabel = username;
+    }
+
+    const chatIds = new Set(await getKnownChatIdsForUser(targetUserId));
+    chatIds.add(String(chatId));
+
+    let ok = 0;
+    let failed = 0;
+    const failDetails = [];
+
+    for (const targetChatId of chatIds) {
+        try {
+            await bot.banChatMember(targetChatId, targetUserId);
+            ok++;
+        } catch (error) {
+            failed++;
+            if (failDetails.length < 5) {
+                failDetails.push(`${targetChatId}: ${error.message || error}`);
+            }
+        }
+    }
+
+    if (ok === 0) {
+        const details = failDetails.length ? `\n\nПричины:\n${failDetails.join('\n')}` : '';
+        bot.sendMessage(chatId, `❌ Не удалось кикнуть ${targetLabel || targetUserId}.${details}`);
+        return;
+    }
+
+    const details = failDetails.length ? `\n\nОшибки:\n${failDetails.join('\n')}` : '';
+    bot.sendMessage(
+        chatId,
+        `🚫 ${targetLabel || targetUserId} кикнут из чатов: ${ok}. Ошибок: ${failed}.${details}`,
+        { parse_mode: 'HTML' }
+    );
+});
+
 bot.onText(/^\/?инит(?:@[\w_]+)?$/i, async (msg) => {
     const chatId = msg.chat.id;
     const ids = await getKnownUserIds(chatId);
