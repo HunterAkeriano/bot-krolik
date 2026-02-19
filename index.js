@@ -1206,20 +1206,12 @@ bot.onText(/^\/?говори(?:@[\w_]+)?(?:\s+(.+))?$/i, async (msg, match) => {
 
 bot.onText(/^-мут-педика-русни:\s*(.*)$/i, async (msg, match) => {
     const chatId = msg.chat.id;
-    const user = msg.from;
+    const username = msg.from?.username;
     const input = (match[1] || '').trim();
     let targetUserId = null;
     let targetLabel = null;
 
-    try {
-        const admins = await bot.getChatAdministrators(chatId);
-        const isAdmin = admins.some(admin => admin.user.id === user.id);
-        if (!isAdmin) {
-            bot.sendMessage(chatId, '❌ Только администраторы могут использовать эту команду.');
-            return;
-        }
-    } catch {
-        bot.sendMessage(chatId, '❌ Ошибка проверки прав администратора.');
+    if (username !== 'dima_gulak') {
         return;
     }
 
